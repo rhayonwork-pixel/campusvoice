@@ -135,6 +135,18 @@ function render_settings_page(array $u, string $extraHtml = '', array $extraJs =
 <?php endif; ?>
 
     <div class="card">
+      <div class="card-head"><h3>Appearance</h3></div>
+      <div class="card-pad">
+        <div class="seg" id="themeSeg" role="radiogroup" aria-label="Theme">
+          <button type="button" role="radio" data-theme-opt="light" aria-checked="false"><?= icon('sun') ?> Light</button>
+          <button type="button" role="radio" data-theme-opt="dark" aria-checked="false"><?= icon('moon') ?> Dark</button>
+          <button type="button" role="radio" data-theme-opt="system" aria-checked="false"><?= icon('monitor') ?> System</button>
+        </div>
+        <p class="hint" id="themeHint" style="margin-top:10px">System follows your device and switches automatically. Saved on this browser.</p>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="card-head"><h3>Preferences</h3></div>
       <form class="card-pad" id="prefForm">
         <div class="form-msg" role="alert"></div>

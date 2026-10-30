@@ -16,11 +16,13 @@ function html_head(string $title, array $css = [], string $bodyClass = ''): void
 <link rel="icon" type="image/webp" href="<?= e(url('assets/img/cmu-logo.webp')) ?>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script src="<?= e(asset('js/theme.js')) ?>"></script>
 <link rel="stylesheet" href="<?= e(asset('css/cv.css')) ?>">
 <?php foreach ($css as $file): ?>
 <link rel="stylesheet" href="<?= e(asset('css/' . $file)) ?>">
 <?php endforeach; ?>
 <link rel="stylesheet" href="<?= e(asset('css/identity.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('css/dark.css')) ?>">
 </head>
 <body class="<?= e($bodyClass) ?>">
 <?php

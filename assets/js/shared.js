@@ -11,7 +11,7 @@
       el: nt, url: 'api/notifications.php', cols: 3, per: 12,
       params: () => ({ action: 'list' }),
       empty: { title: 'No notifications', text: 'You are all caught up.' },
-      row: (n) => '<tr class="clickable" data-id="' + n.notification_id + '" data-concern="' + (n.concern_id || '') + '" style="' + (n.is_read == 1 ? '' : 'background:#fdfaf2') + '">' +
+      row: (n) => '<tr class="clickable' + (n.is_read == 1 ? '' : ' unread-row') + '" data-id="' + n.notification_id + '" data-concern="' + (n.concern_id || '') + '">' +
         '<td><span class="dot-u ' + (n.is_read == 1 ? '' : 'on') + '" title="' + (n.is_read == 1 ? 'Read' : 'Unread') + '"></span></td>' +
         '<td><div class="n-title">' + E(n.title) + (n.is_urgent == 1 ? '<span class="n-urgent">Urgent</span>' : '') + '</div><div class="cell-sub">' + E(n.message) + '</div></td>' +
         '<td class="cell-sub" style="white-space:nowrap">' + CV.ago(n.created_at) + '</td></tr>'
@@ -23,6 +23,15 @@
       if (tr.dataset.concern) location.href = CV.url(role + '/concern.php?id=' + tr.dataset.concern); else { tbl.reload(true); CV.refreshBell(); }
     });
     CV.$('#readAll').addEventListener('click', async () => { await CV.post('api/notifications.php', { action: 'read_all' }); tbl.reload(true); CV.refreshBell(); CV.toast('All notifications marked as read.'); });
+  }
+
+  /* appearance: light / dark / system */
+  const seg = CV.$('#themeSeg');
+  if (seg && window.cvTheme) {
+    const show = () => CV.$$('button', seg).forEach((b) => b.setAttribute('aria-checked', String(b.dataset.themeOpt === cvTheme.get())));
+    show();
+    seg.addEventListener('click', (e) => { const b = e.target.closest('button[data-theme-opt]'); if (!b) return; cvTheme.set(b.dataset.themeOpt); show(); CV.toast('Theme set to ' + b.dataset.themeOpt + '.'); });
+    document.addEventListener('cv:theme', show);
   }
 
   /* settings */

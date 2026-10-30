@@ -43,3 +43,12 @@
 .dot-u { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: transparent; }
 .dot-u.on { background: var(--gold); }
 .n-title { font-family: var(--serif); font-weight: 700; font-size: 1rem; }
+
+/* ---------- appearance selector (Settings) ---------- */
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: .7rem .5rem; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--ink); font-weight: 600; font-size: .9rem; transition: background .2s, color .2s; }
+.seg button:last-child { border-right: 0; }
+.seg button .ic { width: 18px; height: 18px; }
+.seg button:hover { background: rgba(15, 42, 94, .05); }
+.seg button[aria-checked="true"] { background: var(--navy); color: #fff; }
+.unread-row td { background: #fdfaf2; }
