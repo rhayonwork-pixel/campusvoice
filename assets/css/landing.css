@@ -19,11 +19,11 @@ body.landing { background: var(--cream); }
 /* hero — photos only, drifting and cross-fading; nothing to click */
 .hero { position: relative; height: 100svh; min-height: 560px; max-height: 920px; overflow: hidden; background: var(--navy-deep); color: #fff; display: flex; align-items: center; }
 .hero-photos, .hero-shade { position: absolute; inset: 0; }
-.hp { position: absolute; inset: -4%; background-size: cover; background-position: center; opacity: 0; transition: opacity 2.4s ease-in-out; will-change: opacity, transform; }
+.hp { position: absolute; inset: -4%; background-size: cover; background-position: center 40%; opacity: 0; transition: opacity 2.4s ease-in-out; will-change: opacity, transform; }
 .hp.on { opacity: 1; }
 .hp.a { animation: driftA 26s ease-in-out infinite alternate; }
-.hp.b { animation: driftB 26s ease-in-out infinite alternate; background-position: center 35%; filter: blur(1.5px); }
-.hp.c { animation: driftC 26s ease-in-out infinite alternate; background-position: 70% center; }
+.hp.b { animation: driftB 26s ease-in-out infinite alternate; background-position: center 55%; }
+.hp.c { animation: driftC 26s ease-in-out infinite alternate; background-position: center 45%; }
 @keyframes driftA { from { transform: scale(1.02) translate(0, 0); } to { transform: scale(1.12) translate(-2%, -1%); } }
 @keyframes driftB { from { transform: scale(1.12) translate(1%, 0); } to { transform: scale(1.02) translate(-1%, 1%); } }
 @keyframes driftC { from { transform: scale(1.04) translate(-1%, 1%); } to { transform: scale(1.14) translate(2%, -1%); } }

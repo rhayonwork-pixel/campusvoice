@@ -2,7 +2,7 @@
 body.authpage { background: var(--cream); }
 .auth { min-height: 100svh; display: grid; grid-template-columns: minmax(320px, 44%) 1fr; }
 .auth-side { position: relative; overflow: hidden; color: #fff; padding: 2.2rem clamp(1.5rem, 4vw, 3.5rem); display: flex; flex-direction: column; justify-content: space-between; background: var(--navy-deep); }
-.auth-side-bg { position: absolute; inset: 0; background: linear-gradient(160deg, rgba(10,28,64,.88), rgba(15,42,94,.7) 60%, rgba(10,28,64,.92)), url('../img/cmu-administration-building.png') center/cover; animation: drift 24s ease-in-out infinite alternate; }
+.auth-side-bg { position: absolute; inset: 0; background: linear-gradient(160deg, rgba(10,28,64,.88), rgba(15,42,94,.7) 60%, rgba(10,28,64,.92)), url('../img/campus-3.webp') center/cover; animation: drift 24s ease-in-out infinite alternate; }
 @keyframes drift { from { transform: scale(1.03); } to { transform: scale(1.14) translate(-2%, 1%); } }
 .auth-brand, .auth-quote { position: relative; z-index: 1; }
 .auth-brand { display: flex; align-items: center; gap: .8rem; }

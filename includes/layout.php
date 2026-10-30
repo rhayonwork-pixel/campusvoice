@@ -13,7 +13,7 @@ function html_head(string $title, array $css = [], string $bodyClass = ''): void
 <meta name="cv-base" content="<?= e(base_path()) ?>">
 <meta name="cv-csrf" content="<?= e(csrf_token()) ?>">
 <meta name="theme-color" content="#0f2a5e">
-<link rel="icon" type="image/png" href="<?= e(url('assets/img/cmu-logo.png')) ?>">
+<link rel="icon" type="image/webp" href="<?= e(url('assets/img/cmu-logo.webp')) ?>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="<?= e(url('assets/css/cv.css')) ?>">
@@ -66,5 +66,5 @@ function auth_close(): void
 
 function logo(string $class = '', int $h = 44): string
 {
-    return '<img class="logo-img ' . e($class) . '" src="' . e(url('assets/img/cmu-logo.png')) . '" alt="City of Malabon University seal" height="' . $h . '" style="height:' . $h . 'px;width:auto">';
+    return '<img class="logo-img ' . e($class) . '" src="' . e(url('assets/img/cmu-logo.webp')) . '" alt="City of Malabon University seal" height="' . $h . '" style="height:' . $h . 'px;width:auto">';
 }

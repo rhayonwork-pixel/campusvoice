@@ -39,9 +39,9 @@ icon_sprite();
   <!-- HERO: a continuous photo slideshow. No buttons, arrows or slide titles. -->
   <section class="hero" id="hero" aria-label="CampusVoice">
     <div class="hero-photos" aria-hidden="true">
-      <div class="hp on a" style="background-image:url('<?= e(url('assets/img/cmu-administration-building.png')) ?>')"></div>
-      <div class="hp b" style="background-image:url('<?= e(url('assets/img/cmu-campus-courtyard.png')) ?>')"></div>
-      <div class="hp c" style="background-image:url('<?= e(url('assets/img/cmu-administration-building.png')) ?>')"></div>
+      <div class="hp on a" style="background-image:url('<?= e(url('assets/img/campus-1.webp')) ?>')"></div>
+      <div class="hp b" style="background-image:url('<?= e(url('assets/img/campus-2.webp')) ?>')"></div>
+      <div class="hp c" style="background-image:url('<?= e(url('assets/img/campus-3.webp')) ?>')"></div>
     </div>
     <div class="hero-shade" aria-hidden="true"></div>
     <div class="hero-copy">

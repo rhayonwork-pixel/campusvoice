@@ -1,15 +1,13 @@
 <?php
 /**
- * CampusVoice configuration.
- * Do not put real credentials here — copy config.local.sample.php to config.local.php
- * (it is git-ignored and overrides anything below).
+ * CampusVoice configuration (single file — no local override file).
  */
 $config = [
     'db' => [
-        'host'    => 'localhost',
-        'name'    => 'campusvoice',
-        'user'    => 'root',
-        'pass'    => '',
+        'host'    => 'sql309.infinityfree.com',
+        'name'    => 'if0_43316164_CampusVoice',
+        'user'    => 'if0_43316164',
+        'pass'    => '8Iha9ReGySMZ',
         'charset' => 'utf8mb4',
     ],
     'app' => [
@@ -19,23 +17,23 @@ $config = [
         'mail_from'      => 'no-reply@campusvoice.local',
         'mail_from_name' => 'CampusVoice',
     ],
-    // PLACEHOLDER — Gmail / SMTP mailing. Not wired yet: includes/mail.php still uses PHP mail().
-    // Gmail needs an "App password" (Google Account > Security > 2-Step Verification > App passwords).
-    // InfinityFree blocks outbound SMTP, so this only works on a host that allows it.
+    // EMAIL (password-reset links). Off by default: the system then uses PHP mail() and keeps working either way.
+    // To use Gmail: turn on 2-Step Verification, create an "App password" (Google Account > Security),
+    // set enabled => true and fill in user + pass. If SMTP fails (InfinityFree blocks it) it falls back to mail().
     'smtp' => [
         'enabled' => false,
         'host'    => 'smtp.gmail.com',
         'port'    => 587,
-        'secure'  => 'tls',
-        'user'    => 'yourcampusvoice@gmail.com',
-        'pass'    => '',                 // the 16-character app password goes in config.local.php, never here
+        'secure'  => 'tls',              // 'tls' (port 587) or 'ssl' (port 465)
+        'user'    => '',                 // e.g. yourcampusvoice@gmail.com
+        'pass'    => '',                 // the 16-character Google app password (NOT your Gmail password)
     ],
-    // PLACEHOLDER — "Continue with Google" sign-in. Not wired yet (needs a Google Cloud OAuth client).
+    // PLACEHOLDER — "Continue with Google" sign-in on the login page. Not connected yet.
     'google' => [
         'enabled'        => false,
         'client_id'      => '',
-        'client_secret'  => '',          // keep the real value in config.local.php only
-        'redirect_uri'   => '',          // e.g. https://yourdomain/api/google-callback.php
+        'client_secret'  => '',
+        'redirect_uri'   => '',
         'allowed_domain' => 'cityofmalabonuniversity.edu.ph',
     ],
     'security' => [
@@ -53,8 +51,4 @@ $config = [
     ],
 ];
 
-$local = __DIR__ . '/config.local.php';
-if (is_file($local)) {
-    $config = array_replace_recursive($config, require $local);
-}
 return $config;
