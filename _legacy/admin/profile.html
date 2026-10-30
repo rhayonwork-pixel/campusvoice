@@ -1,0 +1,683 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Profile | CampusVoice</title>
+
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/admin.css">
+
+    <style>
+        #profileMessage:empty { display: none; }
+        #profileAvatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+        #profileForm input[readonly] {
+            background-color: #fafbfd;
+            cursor: default;
+        }
+        #profileModalOverlay .form-actions [hidden] {
+            display: none !important;
+        }
+        #profileModalOverlay .form-grid {
+            margin-top: 18px;
+        }
+        .profile-status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            margin-right: 7px;
+            border-radius: 50%;
+            background: #16a34a;
+        }
+        .profile-status-dot.offline {
+            background: #9ca3af;
+        }
+    </style>
+</head>
+
+<body>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/shell.js"></script>
+
+<script>
+(async function () {
+    "use strict";
+
+    const sb = window.campusVoiceSupabase;
+
+    let savedUser = null;
+
+    try {
+        savedUser = JSON.parse(
+            localStorage.getItem("campusvoiceUser") ||
+            sessionStorage.getItem("campusvoiceUser") ||
+            "null"
+        );
+    } catch (error) {
+        console.error("Session read error:", error);
+    }
+
+    const userId = savedUser?.userId || savedUser?.user_id;
+
+    const content = `
+        <div class="card form-card">
+            <div class="profile-top">
+                <div class="profile-photo-wrap">
+                    <div
+                        id="profileAvatar"
+                        class="avatar"
+                        style="width:88px;height:88px;display:flex;align-items:center;justify-content:center;flex-shrink:0;border-radius:50%;background:#eaf0fc;color:#173568;font-size:28px;font-weight:600;overflow:hidden;"
+                    >J</div>
+
+                    <div>
+                        <h2 id="profileName">Loading profile...</h2>
+                        <p id="profileDescription">Administrator</p>
+                    </div>
+                </div>
+            </div>
+
+            <div
+                id="profileMessage"
+                class="card-subtitle"
+                role="status"
+                aria-live="polite"
+                style="margin-top:18px;"
+            ></div>
+
+            <div style="display:flex;justify-content:flex-end;margin-top:20px;">
+                <button class="btn" id="editProfile" type="button">
+                    Edit Profile
+                </button>
+            </div>
+
+            <div class="info-grid" style="margin-top:18px;">
+                <div class="info-box">
+                    <small>LAST LOGIN</small>
+                    <b id="lastLogin">Not available</b>
+                </div>
+
+                <div class="info-box">
+                    <small>ACCOUNT STATUS</small>
+                    <b id="accountStatus">—</b>
+                </div>
+
+                <div class="info-box">
+                    <small>PORTAL STATUS</small>
+                    <b id="portalStatus">Checking...</b>
+                </div>
+            </div>
+
+            <div
+                id="profileModalOverlay"
+                class="profile-modal-overlay"
+                aria-hidden="true"
+            >
+                <section
+                    class="profile-modal"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="profileModalTitle"
+                >
+                    <div class="profile-modal-header">
+                        <div>
+                            <h2 id="profileModalTitle">Edit Profile</h2>
+                            <p style="margin:6px 0 0;color:#697586;">
+                                Update your administrator information.
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            class="profile-modal-close"
+                            id="closeProfileModal"
+                            aria-label="Close edit profile"
+                        >&times;</button>
+                    </div>
+
+                    <form id="profileForm">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="firstName">First Name</label>
+                                <input id="firstName" type="text"
+                                    maxlength="100" autocomplete="given-name"
+                                    required readonly>
+                            </div>
+
+                            <div class="field">
+                                <label for="middleInitial">Middle Initial</label>
+                                <input id="middleInitial" type="text"
+                                    maxlength="10" readonly>
+                            </div>
+
+                            <div class="field">
+                                <label for="lastName">Last Name</label>
+                                <input id="lastName" type="text"
+                                    maxlength="100" autocomplete="family-name"
+                                    required readonly>
+                            </div>
+
+                            <div class="field">
+                                <label for="adminId">Admin ID</label>
+                                <input id="adminId" type="text" disabled>
+                            </div>
+
+                            <div class="field">
+                                <label for="email">Email</label>
+                                <input id="email" type="email" disabled>
+                            </div>
+
+                            <div class="field">
+                                <label for="role">Role</label>
+                                <input id="role" type="text" disabled>
+                            </div>
+
+                            <div class="field">
+                                <label for="contact">Contact Number</label>
+                                <input id="contact" type="tel"
+                                    maxlength="30" placeholder="09XXXXXXXXX"
+                                    readonly>
+                            </div>
+
+                            <div class="field">
+                                <label for="photo">Profile Picture</label>
+                                <input id="photo" type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    disabled>
+                                <div class="hint">
+                                    Image preview only. Storage upload is not configured.
+                                </div>
+                            </div>
+
+                            <div class="field full">
+                                <label for="password">New Password</label>
+                                <input id="password" type="password"
+                                    minlength="8" autocomplete="new-password"
+                                    placeholder="Leave blank to keep current password"
+                                    disabled>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button class="btn" id="cancelEdit" type="button">
+                                Cancel
+                            </button>
+
+                            <button class="btn primary" id="saveProfile" type="submit">
+                                Save Changes
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+        </div>
+    `;
+
+    shell(
+        "profile.html",
+        "Profile",
+        "Manage your administrator account.",
+        content,
+        ""
+    );
+
+    const $ = id => document.getElementById(id);
+
+    let profile = null;
+    let originalProfile = null;
+    let previewUrl = null;
+    let isEditing = false;
+
+    const editableFields = [
+        "firstName",
+        "middleInitial",
+        "lastName",
+        "contact"
+    ];
+
+    function showMessage(message, isError = false) {
+        $("profileMessage").textContent = message;
+        $("profileMessage").style.color =
+            isError ? "#b42318" : "#087443";
+    }
+
+    function fullName(user) {
+        return [
+            user.first_name,
+            user.middle_initial,
+            user.last_name
+        ].filter(Boolean).join(" ");
+    }
+
+    function roleName(role) {
+        const labels = {
+            admin: "Administrator",
+            super_admin: "Super Admin",
+            staff: "Staff",
+            student: "Student"
+        };
+
+        return labels[role] || role || "User";
+    }
+
+    function setEditing(enabled) {
+        isEditing = enabled;
+
+        editableFields.forEach(id => {
+            $(id).readOnly = !enabled;
+        });
+
+        $("photo").disabled = !enabled;
+        $("password").disabled = !enabled;
+    }
+
+    async function displayProfile(data) {
+        profile = data;
+
+        $("firstName").value = data.first_name || "";
+        $("middleInitial").value = data.middle_initial || "";
+        $("lastName").value = data.last_name || "";
+        $("adminId").value = data.admin_id || "—";
+        $("email").value = data.email || "";
+        $("role").value = roleName(data.role);
+        $("contact").value = data.contact_number || "";
+
+        const status = data.account_status || "Unknown";
+
+        $("accountStatus").textContent =
+            status.charAt(0).toUpperCase() + status.slice(1);
+
+        $("profileName").textContent =
+            fullName(data) || "CampusVoice User";
+
+        $("profileDescription").textContent =
+            `${roleName(data.role)} · ${
+                data.admin_id || data.staff_id ||
+                data.student_id || "CampusVoice"
+            }`;
+
+        const avatar = $("profileAvatar");
+avatar.replaceChildren();
+
+if (data.profile_picture) {
+    const image = document.createElement("img");
+    image.alt = "Profile picture";
+    image.style.width = "100%";
+    image.style.height = "100%";
+    image.style.objectFit = "cover";
+
+    avatar.appendChild(image);
+
+    const { data: signedData, error } =
+    await sb.storage
+        .from("profile-pictures")
+        .createSignedUrl(data.profile_picture, 3600);
+
+if (!error && signedData?.signedUrl) {
+    image.onerror = () => {
+        console.error("Image failed to load:", image.src);
+        showMessage(
+            "Image failed to load. Check the Storage bucket and file path.",
+            true
+        );
+    };
+
+    image.src = signedData.signedUrl;
+} else {
+    console.error("Signed URL error:", error);
+    avatar.replaceChildren();
+    avatar.textContent =
+        (data.first_name || "U").trim().charAt(0).toUpperCase();
+}
+} else {
+    avatar.textContent =
+        (data.first_name || "U").trim().charAt(0).toUpperCase();
+}
+    }
+
+    function captureOriginalProfile() {
+        originalProfile = {
+            firstName: $("firstName").value,
+            middleInitial: $("middleInitial").value,
+            lastName: $("lastName").value,
+            contact: $("contact").value
+        };
+    }
+
+    function restoreOriginalProfile() {
+        if (!originalProfile) return;
+
+        $("firstName").value = originalProfile.firstName;
+        $("middleInitial").value = originalProfile.middleInitial;
+        $("lastName").value = originalProfile.lastName;
+        $("contact").value = originalProfile.contact;
+    }
+
+    function resetPhotoPreview() {
+        if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+            previewUrl = null;
+        }
+
+        $("photo").value = "";
+
+        if (!profile) return;
+
+        const avatar = $("profileAvatar");
+        avatar.replaceChildren();
+
+        if (profile.profile_picture) {
+            const image = document.createElement("img");
+            image.src = profile.profile_picture;
+            image.alt = "Profile picture";
+            avatar.appendChild(image);
+        } else {
+            avatar.textContent =
+                (profile.first_name || "U").trim().charAt(0).toUpperCase();
+        }
+    }
+
+    async function loadProfile() {
+        if (!sb || !userId) {
+            showMessage(
+                "Unable to identify your account. Please sign in again.",
+                true
+            );
+            $("editProfile").disabled = true;
+            return;
+        }
+
+        const { data, error } = await sb
+            .from("users")
+            .select(`
+                user_id,
+                admin_id,
+                staff_id,
+                student_id,
+                first_name,
+                middle_initial,
+                last_name,
+                email,
+                role,
+                contact_number,
+                profile_picture,
+                account_status
+            `)
+            .eq("user_id", userId)
+            .single();
+
+        if (error || !data) {
+            console.error("Profile loading error:", error);
+            showMessage("Could not load your profile from Supabase.", true);
+            $("editProfile").disabled = true;
+            return;
+        }
+
+        await displayProfile(data);
+    }
+
+    // Portal Status: checks the current Supabase session.
+    async function updatePortalStatus() {
+        const element = $("portalStatus");
+
+        try {
+            if (!sb) {
+                element.textContent = "Unknown";
+                return;
+            }
+
+            const { data, error } = await sb.auth.getSession();
+
+            if (error || !data?.session) {
+                element.textContent = "Offline";
+                return;
+            }
+
+            element.textContent = "Online";
+        } catch (error) {
+            console.error("Portal status error:", error);
+            element.textContent = "Unknown";
+        }
+    }
+
+    // Last Login: display only a timestamp that is actually available.
+    function updateLastLogin() {
+        const element = $("lastLogin");
+
+        try {
+            const currentSavedUser = JSON.parse(
+                localStorage.getItem("campusvoiceUser") ||
+                sessionStorage.getItem("campusvoiceUser") ||
+                "null"
+            );
+
+            if (currentSavedUser?.lastLogin) {
+                const date = new Date(currentSavedUser.lastLogin);
+
+                element.textContent = Number.isNaN(date.getTime())
+                    ? "Not available"
+                    : date.toLocaleString("en-PH", {
+                        dateStyle: "medium",
+                        timeStyle: "short"
+                    });
+            } else {
+                element.textContent = "Not available";
+            }
+        } catch (error) {
+            console.error("Last login display error:", error);
+            element.textContent = "Not available";
+        }
+    }
+
+    function openProfileModal() {
+        const modal = $("profileModalOverlay");
+
+        if (!profile) {
+            showMessage("Your profile is not loaded yet.", true);
+            return;
+        }
+
+        captureOriginalProfile();
+        setEditing(true);
+        $("password").value = "";
+
+        modal.classList.add("is-open");
+        modal.setAttribute("aria-hidden", "false");
+        modal.style.display = "flex";
+        document.body.style.overflow = "hidden";
+
+        $("firstName").focus();
+    }
+
+    function closeProfileModal() {
+        if (isEditing) {
+            restoreOriginalProfile();
+            $("password").value = "";
+            resetPhotoPreview();
+        }
+
+        setEditing(false);
+
+        const modal = $("profileModalOverlay");
+        modal.classList.remove("is-open");
+        modal.setAttribute("aria-hidden", "true");
+        modal.style.display = "none";
+
+        document.body.style.overflow = "";
+        $("editProfile").focus();
+    }
+
+    $("editProfile").addEventListener("click", openProfileModal);
+    $("closeProfileModal").addEventListener("click", closeProfileModal);
+    $("cancelEdit").addEventListener("click", closeProfileModal);
+
+    $("profileModalOverlay").addEventListener("click", function (event) {
+        if (event.target === $("profileModalOverlay")) {
+            closeProfileModal();
+        }
+    });
+
+    document.addEventListener("keydown", function (event) {
+        if (
+            event.key === "Escape" &&
+            $("profileModalOverlay").classList.contains("is-open")
+        ) {
+            closeProfileModal();
+        }
+    });
+
+    $("profileForm").addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        if (!isEditing || !profile || !sb) return;
+
+        const firstName = $("firstName").value.trim();
+        const middleInitial = $("middleInitial").value.trim();
+        const lastName = $("lastName").value.trim();
+        const contact = $("contact").value.trim();
+        const newPassword = $("password").value;
+
+        if (!firstName || !lastName) {
+            showMessage("First Name and Last Name are required.", true);
+            return;
+        }
+
+        if (newPassword && newPassword.length < 8) {
+            showMessage(
+                "The new password must contain at least 8 characters.",
+                true
+            );
+            return;
+        }
+
+        const button = $("saveProfile");
+        button.disabled = true;
+        button.textContent = "Saving...";
+
+        try {
+            const updates = {
+    first_name: firstName,
+    middle_initial: middleInitial || null,
+    last_name: lastName,
+    contact_number: contact || null
+};
+
+const photoFile = $("photo").files?.[0];
+
+if (photoFile) {
+    const fileExt = photoFile.name.split(".").pop().toLowerCase();
+    const filePath = `${userId}/avatar.${fileExt}`;
+
+    const { error: uploadError } = await sb.storage
+        .from("profile-pictures")
+        .upload(filePath, photoFile, {
+            upsert: true,
+            contentType: photoFile.type
+        });
+
+    if (uploadError) throw uploadError;
+
+    updates.profile_picture = filePath;
+}
+
+            const { data: updatedRows, error } = await sb
+                .from("users")
+                .update(updates)
+                .eq("user_id", userId)
+                .select("user_id");
+
+            if (error) throw error;
+
+            if (!updatedRows || updatedRows.length === 0) {
+                throw new Error(
+                    "No profile was updated. Check your account permissions."
+                );
+            }
+
+            if (newPassword) {
+                const { error: passwordError } =
+                    await sb.auth.updateUser({ password: newPassword });
+
+                if (passwordError) {
+                    await loadProfile();
+                    $("password").value = "";
+                    throw new Error(
+                        "Profile saved, but password update failed: " +
+                        passwordError.message
+                    );
+                }
+            }
+
+            $("password").value = "";
+            await loadProfile();
+            captureOriginalProfile();
+
+            const modal = $("profileModalOverlay");
+            modal.classList.remove("is-open");
+            modal.setAttribute("aria-hidden", "true");
+            modal.style.display = "none";
+            document.body.style.overflow = "";
+
+            showMessage("Profile saved successfully.");
+
+        } catch (error) {
+            console.error("Profile update error:", error);
+            showMessage(
+                error.message || "Unable to save profile changes.",
+                true
+            );
+        } finally {
+            button.disabled = false;
+            button.textContent = "Save Changes";
+        }
+    });
+
+    $("photo").addEventListener("change", function (event) {
+        if (!isEditing) return;
+
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+            showMessage("Please select a JPG, PNG, or WebP image.", true);
+            event.target.value = "";
+            return;
+        }
+
+        if (file.size > 10 * 1024 * 1024) {
+    showMessage("The image must be 10 MB or smaller.", true);
+    event.target.value = "";
+    return;
+}
+
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        previewUrl = URL.createObjectURL(file);
+
+        const avatar = $("profileAvatar");
+        avatar.replaceChildren();
+
+        const image = document.createElement("img");
+        image.src = previewUrl;
+        image.alt = "Profile picture preview";
+        avatar.appendChild(image);
+
+        showMessage(
+            "Image preview ready. The photo is not saved because Storage upload is not configured."
+        );
+    });
+
+    await loadProfile();
+    updateLastLogin();
+    await updatePortalStatus();
+
+})();
+</script>
+</body>
+</html>

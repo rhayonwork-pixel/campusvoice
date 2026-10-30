@@ -1,0 +1,929 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Assignments | CampusVoice</title>
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/admin.css">
+
+    <style>
+        #assignmentSearch,
+        #assignmentFilter {
+            height: 42px;
+            border: 1px solid #dbe3ef;
+            border-radius: 9px;
+            background: #fff;
+            color: #173568;
+            font: inherit;
+            font-size: 14px;
+            outline: none;
+            box-sizing: border-box;
+            transition: border-color .2s ease, box-shadow .2s ease;
+        }
+
+        #assignmentSearch {
+            padding: 0 13px;
+            min-width: 150px;
+        }
+
+        #assignmentSearch::placeholder {
+            color: #94a3b8;
+        }
+
+        #assignmentFilter {
+            padding: 0 34px 0 12px;
+            cursor: pointer;
+        }
+
+        #assignmentSearch:focus,
+        #assignmentFilter:focus {
+            border-color: #315c9b;
+            box-shadow: 0 0 0 3px rgba(49, 92, 155, .12);
+        }
+
+        @media (max-width: 520px) {
+            #assignmentSearch {
+                flex-basis: 100%;
+                width: 100%;
+            }
+
+            #assignmentFilter {
+                flex: 1;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../js/supabase-config.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/shell.js"></script>
+
+    <script>
+    (function () {
+        "use strict";
+
+        const sb = window.campusVoiceSupabase;
+
+        let concerns = [];
+        let assignments = [];
+        let staff = [];
+        let categories = [];
+        let locations = [];
+        let priorities = [];
+        let statuses = [];
+        let departments = [];
+        let concernUpdates = [];
+
+        if (!sb) {
+            document.body.innerHTML =
+                "<p style='padding:24px'>Supabase connection is unavailable. Check your configuration.</p>";
+            return;
+        }
+
+        function safe(value) {
+            return String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+
+        function notify(message) {
+            if (typeof window.toast === "function") {
+                window.toast(message);
+            } else {
+                alert(message);
+            }
+        }
+
+        function fullName(user) {
+            return [
+                user.first_name,
+                user.middle_initial,
+                user.last_name
+            ].filter(Boolean).join(" ") || user.email || "Unnamed staff";
+        }
+
+        function findById(list, id, key) {
+            return list.find(item => String(item[key]) === String(id));
+        }
+
+        function getAssignment(concernId) {
+            return assignments.find(
+                item => String(item.concern_id) === String(concernId)
+            );
+        }
+
+        function getStaff(userId) {
+            return findById(staff, userId, "user_id");
+        }
+
+        function getConcernStatus(concern) {
+            return findById(statuses, concern.status_id, "status_id")?.status_name
+                || "Unknown";
+        }
+
+        function getCategory(concern) {
+            return findById(categories, concern.category_id, "category_id")
+                ?.category_name || "Uncategorized";
+        }
+
+        function getLocation(concern) {
+            const location = findById(
+                locations,
+                concern.location_id,
+                "location_id"
+            );
+
+            if (!location) return "Location not specified";
+
+            return [
+                location.building,
+                location.floor,
+                location.area
+            ].filter(Boolean).join(" · ");
+        }
+
+        function getPriority(concern) {
+            return findById(priorities, concern.priority_id, "priority_id")
+                ?.priority_name || "Not set";
+        }
+
+        function getConcernCode(concern) {
+            return concern.concern_code || String(concern.concern_id);
+        }
+
+        const content = `
+            <div class="grid g2">
+                <div class="card">
+                    <div class="card-head">
+                        <div>
+                            <h3 class="card-title">Assignment Queue</h3>
+                            <div class="card-subtitle">
+                                Review concerns and assign active staff members.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:15px;">
+                        <input id="assignmentSearch" type="search"
+                            placeholder="Search concerns..."
+                            style="flex:1;min-width:150px;">
+
+                        <select id="assignmentFilter" aria-label="Filter assignments">
+                            <option value="all">All concerns</option>
+                            <option value="unassigned">Unassigned</option>
+                            <option value="assigned">Assigned</option>
+                        </select>
+                    </div>
+
+                    <div id="assignmentMessage" class="card-subtitle"
+                        role="status" aria-live="polite"
+                        style="margin-bottom:12px;"></div>
+
+                    <div id="assignmentQueue" class="list">
+                        <div class="empty">Loading concerns...</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-head">
+                        <div>
+                            <h3 class="card-title">Staff Workload</h3>
+                            <div class="card-subtitle">
+                                Active workload is based on assigned concerns
+                                that are not resolved, closed, or cancelled.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="staffWorkload">
+                        <div class="empty">Loading staff...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:18px;">
+                <div class="card-head">
+                    <div>
+                        <h3 class="card-title">Current Assignments</h3>
+                        <div class="card-subtitle">
+                            Review the current staff member assigned to each concern.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Concern</th>
+                                <th>Category</th>
+                                <th>Location</th>
+                                <th>Priority</th>
+                                <th>Concern Status</th>
+                                <th>Assigned Staff</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="assignmentTable">
+                            <tr>
+                                <td colspan="7" class="empty">Loading assignments...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        shell(
+            "assignments.html",
+            "Assignments",
+            "Assign and monitor staff workload for campus concerns.",
+            content,
+            ""
+        );
+
+        function showMessage(message, isError = false) {
+            const element = document.getElementById("assignmentMessage");
+            if (!element) return;
+
+            element.textContent = message;
+            element.style.color = isError ? "#b42318" : "#087443";
+        }
+
+        function renderQueue() {
+            const searchElement = document.getElementById("assignmentSearch");
+            const filterElement = document.getElementById("assignmentFilter");
+            const queue = document.getElementById("assignmentQueue");
+
+            if (!searchElement || !filterElement || !queue) return;
+
+            const keyword = searchElement.value.trim().toLowerCase();
+            const filter = filterElement.value;
+
+            const filtered = concerns.filter(concern => {
+                const assignment = getAssignment(concern.concern_id);
+                const isAssigned = Boolean(assignment?.staff_id);
+
+                if (filter === "unassigned" && isAssigned) return false;
+                if (filter === "assigned" && !isAssigned) return false;
+
+                const assignedStaff = assignment
+                    ? getStaff(assignment.staff_id)
+                    : null;
+
+                const searchable = [
+                    getConcernCode(concern),
+                    concern.title,
+                    concern.description,
+                    getCategory(concern),
+                    getLocation(concern),
+                    getConcernStatus(concern),
+                    assignedStaff ? fullName(assignedStaff) : "unassigned"
+                ].join(" ").toLowerCase();
+
+                return searchable.includes(keyword);
+            });
+
+            if (!filtered.length) {
+                queue.innerHTML = `
+                    <div class="empty" style="padding:24px;">
+                        No matching concerns found.
+                    </div>
+                `;
+                return;
+            }
+
+            queue.innerHTML = filtered.map(concern => {
+                const assignment = getAssignment(concern.concern_id);
+                const assignedStaff = assignment
+                    ? getStaff(assignment.staff_id)
+                    : null;
+
+                return `
+                    <div class="list-row">
+                        <div style="min-width:0;flex:1;">
+                            <b>${safe(getConcernCode(concern))} · ${safe(concern.title)}</b>
+                            <small>
+                                ${safe(getCategory(concern))} ·
+                                ${safe(getPriority(concern))}
+                            </small>
+                            <small>
+                                ${assignedStaff
+                                    ? "Assigned to " + safe(fullName(assignedStaff))
+                                    : "Awaiting staff assignment"}
+                            </small>
+                        </div>
+
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                            <button class="btn small"
+                                type="button"
+                                data-action="progress"
+                                data-id="${safe(concern.concern_id)}">
+                                View Progress
+                            </button>
+
+                            <button class="btn small"
+                                type="button"
+                                data-action="assign"
+                                data-id="${safe(concern.concern_id)}">
+                                ${assignedStaff ? "Reassign" : "Assign"}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        function renderWorkload() {
+            const container = document.getElementById("staffWorkload");
+
+            const workload = staff.map(member => {
+                const activeCount = concerns.filter(concern => {
+                    const assignment = getAssignment(concern.concern_id);
+
+                    return String(assignment?.staff_id) === String(member.user_id)
+                        && !["resolved", "closed", "cancelled"].includes(
+                            getConcernStatus(concern).toLowerCase()
+                        );
+                }).length;
+
+                const department = findById(
+                    departments,
+                    member.department_id,
+                    "department_id"
+                );
+
+                return {
+                    member,
+                    activeCount,
+                    department: department?.department_name || "No department"
+                };
+            });
+
+            if (!workload.length) {
+                container.innerHTML = `
+                    <div class="empty" style="padding:24px;">
+                        No active staff accounts found.
+                    </div>
+                `;
+                return;
+            }
+
+            const maxWorkload = Math.max(
+                1,
+                ...workload.map(item => item.activeCount)
+            );
+
+            container.innerHTML = workload.map(item => `
+                <div style="padding:12px 0;border-bottom:1px solid #edf0f4;">
+                    <div style="display:flex;justify-content:space-between;gap:10px;">
+                        <strong>${safe(fullName(item.member))}</strong>
+                        <span>${item.activeCount} active</span>
+                    </div>
+
+                    <div class="workload" style="margin-top:8px;">
+                        <i style="width:${Math.min(
+                            100,
+                            item.activeCount / maxWorkload * 100
+                        )}%"></i>
+                    </div>
+
+                    <div class="card-subtitle" style="margin-top:5px;">
+                        ${safe(item.department)}
+                    </div>
+                </div>
+            `).join("");
+        }
+
+        function renderAssignmentTable() {
+            const tbody = document.getElementById("assignmentTable");
+
+            if (!concerns.length) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="empty">
+                            No concerns have been submitted yet.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = concerns.map(concern => {
+                const assignment = getAssignment(concern.concern_id);
+                const member = assignment
+                    ? getStaff(assignment.staff_id)
+                    : null;
+
+                return `
+                    <tr>
+                        <td>
+                            <strong>${safe(getConcernCode(concern))}</strong>
+                            <div>${safe(concern.title)}</div>
+                        </td>
+                        <td>${safe(getCategory(concern))}</td>
+                        <td>${safe(getLocation(concern))}</td>
+                        <td>${safe(getPriority(concern))}</td>
+                        <td>${safe(getConcernStatus(concern))}</td>
+                        <td>${safe(member ? fullName(member) : "Unassigned")}</td>
+                        <td>
+                            <button class="btn small"
+                                style="margin-right:6px;"
+                                type="button"
+                                data-action="progress"
+                                data-id="${safe(concern.concern_id)}">
+                                View Progress
+                            </button>
+
+                            <button class="btn small"
+                                type="button"
+                                data-action="assign"
+                                data-id="${safe(concern.concern_id)}">
+                                ${member ? "Reassign" : "Assign"}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        async function loadData() {
+            const [
+                concernResult,
+                assignmentResult,
+                staffResult,
+                categoryResult,
+                locationResult,
+                priorityResult,
+                statusResult,
+                departmentResult,
+                updatesResult
+            ] = await Promise.all([
+                sb.from("concerns")
+                    .select("concern_id,concern_code,student_id,category_id,location_id,priority_id,status_id,title,description,date_submitted,created_at,updated_at")
+                    .order("created_at", { ascending: false }),
+
+                sb.from("assignments")
+                    .select("assignment_id,concern_id,staff_id,assigned_by,assigned_at,reassigned_at,assignment_status"),
+
+                sb.from("users")
+                    .select("user_id,staff_id,first_name,middle_initial,last_name,email,role,department_id,account_status")
+                    .eq("role", "staff")
+                    .eq("account_status", "active"),
+
+                sb.from("categories")
+                    .select("category_id,category_name"),
+
+                sb.from("locations")
+                    .select("location_id,building,floor,area,status"),
+
+                sb.from("priorities")
+                    .select("priority_id,priority_name"),
+
+                sb.from("statuses")
+                    .select("status_id,status_name"),
+
+                sb.from("departments")
+                    .select("department_id,department_name"),
+
+                sb.from("concern_updates")
+                    .select("update_id,concern_id,user_id,status_id,update_type,response,action_taken,created_at")
+                    .order("created_at", { ascending: true })
+            ]);
+
+            const results = [
+                concernResult,
+                assignmentResult,
+                staffResult,
+                categoryResult,
+                locationResult,
+                priorityResult,
+                statusResult,
+                departmentResult,
+                updatesResult
+            ];
+
+            const failed = results.find(result => result.error);
+            if (failed) throw failed.error;
+
+            concerns = concernResult.data || [];
+            assignments = assignmentResult.data || [];
+            staff = staffResult.data || [];
+            categories = categoryResult.data || [];
+            locations = locationResult.data || [];
+            priorities = priorityResult.data || [];
+            statuses = statusResult.data || [];
+            departments = departmentResult.data || [];
+            concernUpdates = updatesResult.data || [];
+
+            renderQueue();
+            renderWorkload();
+            renderAssignmentTable();
+        }
+
+        function openProgress(concernId) {
+            const concern = findById(concerns, concernId, "concern_id");
+
+            if (!concern) {
+                notify("Concern not found. Refresh the page and try again.");
+                return;
+            }
+
+            
+            // Hide identical progress entries in the admin view.
+            const uniqueUpdates = [];
+            const seenUpdates = new Set();
+
+            for (const item of updates) {
+                const signature = JSON.stringify([
+                    item.status_id ?? null,
+                    String(item.update_type || "").trim(),
+                    String(item.response || "").trim(),
+                    String(item.action_taken || "").trim(),
+                    String(item.user_id || "")
+                ]);
+
+                if (seenUpdates.has(signature)) continue;
+
+                seenUpdates.add(signature);
+                uniqueUpdates.push(item);
+            }
+
+            const progressContent = uniqueUpdates.length
+                ? uniqueUpdates.map(item => {
+                    const person = getStaff(item.user_id);
+                    const statusName = findById(
+                        statuses,
+                        item.status_id,
+                        "status_id"
+                    )?.status_name;
+
+                    return `
+                        <div style="padding:12px 0;border-bottom:1px solid #edf0f4;">
+                            <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                                <strong>${safe(statusName || item.update_type || "Staff Update")}</strong>
+                                <small>
+                                    ${safe(item.created_at
+                                        ? new Date(item.created_at).toLocaleString("en-PH")
+                                        : "Date unavailable")}
+                                </small>
+                            </div>
+
+                            <div class="card-subtitle" style="margin-top:4px;">
+                                ${safe(person ? fullName(person) : "Staff account")}
+                            </div>
+
+                            ${item.response
+                                ? `<p style="white-space:pre-wrap;margin:10px 0 0;"><strong>Staff response:</strong><br>${safe(item.response)}</p>`
+                                : ""}
+
+                            ${item.action_taken
+                                ? `<p style="white-space:pre-wrap;margin:10px 0 0;"><strong>Action taken:</strong><br>${safe(item.action_taken)}</p>`
+                                : ""}
+                        </div>
+                    `;
+                }).join("")
+                : `
+                    <div class="empty" style="padding:20px;">
+                        No staff progress updates have been recorded for this concern yet.
+                    </div>
+                `;
+
+
+            const box = modal(
+                "Concern Progress",
+                `
+                    <div class="info-grid">
+                        <div class="info-box">
+                            <small>CONCERN</small>
+                            <b>${safe(getConcernCode(concern))} · ${safe(concern.title)}</b>
+                        </div>
+
+                        <div class="info-box">
+                            <small>CURRENT STATUS</small>
+                            <b>${safe(getConcernStatus(concern))}</b>
+                        </div>
+
+                        <div class="info-box">
+                            <small>CATEGORY</small>
+                            <b>${safe(getCategory(concern))}</b>
+                        </div>
+
+                        <div class="info-box">
+                            <small>LOCATION</small>
+                            <b>${safe(getLocation(concern))}</b>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:18px;">
+                        <h3 style="margin:0 0 8px;">Staff Progress History</h3>
+                        ${progressContent}
+                    </div>
+                `,
+                `
+                    <button class="btn" type="button" id="closeProgress">
+                        Close
+                    </button>
+                `
+            );
+
+            const closeButton = box.querySelector("#closeProgress");
+            if (closeButton) {
+                closeButton.addEventListener("click", () => box.remove());
+            }
+        }
+
+        function openAssignment(concernId) {
+            const concern = findById(concerns, concernId, "concern_id");
+
+            if (!concern) {
+                notify("Concern not found. Refresh the page and try again.");
+                return;
+            }
+
+            if (!staff.length) {
+                notify("There are no active staff accounts available for assignment.");
+                return;
+            }
+
+            const current = getAssignment(concern.concern_id);
+            const currentStaff = current ? getStaff(current.staff_id) : null;
+
+            const box = modal(
+                currentStaff ? "Reassign Concern" : "Assign Concern",
+                `
+                    <div class="info-grid">
+                        <div class="info-box">
+                            <small>CONCERN</small>
+                            <b>${safe(getConcernCode(concern))} · ${safe(concern.title)}</b>
+                        </div>
+
+                        <div class="info-box">
+                            <small>CATEGORY</small>
+                            <b>${safe(getCategory(concern))}</b>
+                        </div>
+
+                        <div class="info-box">
+                            <small>LOCATION</small>
+                            <b>${safe(getLocation(concern))}</b>
+                        </div>
+
+                        <div class="info-box">
+                            <small>CURRENT STAFF</small>
+                            <b>${safe(currentStaff ? fullName(currentStaff) : "Unassigned")}</b>
+                        </div>
+                    </div>
+
+                    <div class="field" style="margin-top:15px;">
+                        <label for="assignmentStaff">Select Staff</label>
+                        <select id="assignmentStaff" required>
+                            <option value="">Choose an active staff member</option>
+                            ${staff.map(member => {
+                                const dept = findById(
+                                    departments,
+                                    member.department_id,
+                                    "department_id"
+                                );
+
+                                return `
+                                    <option value="${safe(member.user_id)}"
+                                        ${String(member.user_id) === String(current?.staff_id)
+                                            ? "selected" : ""}>
+                                        ${safe(fullName(member))} — ${safe(
+                                            dept?.department_name || "No department"
+                                        )}
+                                    </option>
+                                `;
+                            }).join("")}
+                        </select>
+                    </div>
+                `,
+                `
+                    <button class="btn primary" id="saveAssignment" type="button">
+                        Save Assignment
+                    </button>
+                `
+            );
+
+            box.querySelector("#saveAssignment").addEventListener(
+                "click",
+                async () => {
+                    const button = box.querySelector("#saveAssignment");
+                    const staffId = box.querySelector("#assignmentStaff").value;
+
+                    if (!staffId) {
+                        notify("Please select a staff member.");
+                        return;
+                    }
+
+                    if (current && String(current.staff_id) === String(staffId)) {
+                        notify("This staff member is already assigned to the concern.");
+                        return;
+                    }
+
+                    const selectedStaff = getStaff(staffId);
+
+                    if (!selectedStaff) {
+                        notify("The selected staff account is unavailable.");
+                        return;
+                    }
+
+                    button.disabled = true;
+                    button.textContent = "Saving...";
+
+                    try {
+                        const {
+                            data: { user },
+                            error: userError
+                        } = await sb.auth.getUser();
+
+                        if (userError) throw userError;
+
+                        if (!user) {
+                            throw new Error(
+                                "Your session has expired. Please log in again."
+                            );
+                        }
+
+                        const { data: adminProfile, error: adminError } = await sb
+                            .from("users")
+                            .select("user_id,role,account_status")
+                            .eq("user_id", user.id)
+                            .maybeSingle();
+
+                        if (adminError) throw adminError;
+
+                        if (
+                            !adminProfile ||
+                            !["admin", "super_admin"].includes(adminProfile.role) ||
+                            adminProfile.account_status !== "active"
+                        ) {
+                            throw new Error(
+                                "Your account is not an active administrator. Please check your admin profile."
+                            );
+                        }
+
+                        let saveResult;
+
+                        if (current) {
+                            saveResult = await sb
+                                .from("assignments")
+                                .update({
+                                    staff_id: staffId,
+                                    assigned_by: user.id,
+                                    reassigned_at: new Date().toISOString()
+                                })
+                                .eq("assignment_id", current.assignment_id);
+                        } else {
+                            saveResult = await sb
+                                .from("assignments")
+                                .insert({
+                                    concern_id: concern.concern_id,
+                                    staff_id: staffId,
+                                    assigned_by: user.id
+                                });
+                        }
+
+                        if (saveResult.error) throw saveResult.error;
+
+                        const assignedStatus = statuses.find(
+                            item =>
+                                String(item.status_name).toLowerCase() === "assigned"
+                        );
+
+                        if (assignedStatus) {
+                            const statusResult = await sb
+                                .from("concerns")
+                                .update({
+                                    status_id: assignedStatus.status_id,
+                                    updated_at: new Date().toISOString()
+                                })
+                                .eq("concern_id", concern.concern_id);
+
+                            if (statusResult.error) {
+                                console.error(
+                                    "Assignment saved, but concern status could not be updated:",
+                                    statusResult.error
+                                );
+
+                                showMessage(
+                                    "Assignment saved, but the concern status could not be updated.",
+                                    true
+                                );
+                            }
+                        }
+
+                        box.remove();
+                        await loadData();
+                        showMessage("Assignment saved successfully.");
+                    } catch (error) {
+                        console.error("Save assignment error:", error);
+                        notify(error.message || "Unable to save assignment.");
+                    } finally {
+                        button.disabled = false;
+                        button.textContent = "Save Assignment";
+                    }
+                }
+            );
+        }
+
+        document.getElementById("assignmentSearch").addEventListener(
+            "input",
+            renderQueue
+        );
+
+        document.getElementById("assignmentFilter").addEventListener(
+            "change",
+            renderQueue
+        );
+
+        document.getElementById("assignmentQueue").addEventListener(
+            "click",
+            event => {
+                const button = event.target.closest('button[data-action]');
+                if (!button) return;
+
+                if (button.dataset.action === "assign") {
+                    openAssignment(button.dataset.id);
+                }
+
+                if (button.dataset.action === "progress") {
+                    openProgress(button.dataset.id);
+                }
+            }
+        );
+
+        document.getElementById("assignmentTable").addEventListener(
+            "click",
+            event => {
+                const button = event.target.closest('button[data-action]');
+                if (!button) return;
+
+                if (button.dataset.action === "assign") {
+                    openAssignment(button.dataset.id);
+                }
+
+                if (button.dataset.action === "progress") {
+                    openProgress(button.dataset.id);
+                }
+            }
+        );
+
+        async function initialize() {
+            try {
+                const { data, error } = await sb.auth.getUser();
+
+                if (error || !data.user) {
+                    window.location.href = "../index.html";
+                    return;
+                }
+
+                const { data: profile, error: profileError } = await sb
+                    .from("users")
+                    .select("role,account_status")
+                    .eq("user_id", data.user.id)
+                    .maybeSingle();
+
+                if (profileError) throw profileError;
+
+                if (
+                    !profile ||
+                    !["admin", "super_admin"].includes(profile.role) ||
+                    profile.account_status !== "active"
+                ) {
+                    window.location.href = "../index.html";
+                    return;
+                }
+
+                await loadData();
+            } catch (error) {
+                console.error("Assignments page error:", error);
+
+                showMessage(
+                    error.message || "Unable to load assignment data.",
+                    true
+                );
+
+                document.getElementById("assignmentQueue").innerHTML =
+                    '<div class="empty">Unable to load concerns. Check the browser Console.</div>';
+
+                document.getElementById("staffWorkload").innerHTML =
+                    '<div class="empty">Unable to load staff workload.</div>';
+
+                document.getElementById("assignmentTable").innerHTML =
+                    '<tr><td colspan="7" class="empty">Unable to load assignments.</td></tr>';
+            }
+        }
+
+        initialize();
+    })();
+    </script>
+</body>
+</html>

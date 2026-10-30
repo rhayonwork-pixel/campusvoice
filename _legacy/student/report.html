@@ -1,0 +1,528 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Report a Concern | CampusVoice</title>
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/student.css">
+</head>
+<body>
+
+<script src="../js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/shell.js"></script>
+
+<script>
+"use strict";
+
+const supabaseClient = window.campusVoiceSupabase ||
+    window.supabase.createClient(
+        window.CAMPUSVOICE_SUPABASE.url,
+        window.CAMPUSVOICE_SUPABASE.publishableKey
+    );
+
+let currentUser = null;
+let selectedPhoto = null;
+let isSubmitting = false;
+
+const content = `
+<div class="card">
+    <div class="eyebrow">CAMPUSVOICE</div>
+    <h2>Report a Concern</h2>
+    <p class="card-subtitle">
+        Tell us about an issue on campus so the appropriate university
+        personnel can review and address it.
+    </p>
+
+    <form id="concernForm">
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="title">Concern Title</label>
+                <input id="title" name="title" type="text"
+                    maxlength="150"
+                    placeholder="Enter a short title for your concern"
+                    required>
+            </div>
+
+            <div class="form-group">
+                <label for="category">Category</label>
+                <select id="category" name="category" required>
+                    <option value="">Loading categories...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="building">Building</label>
+                <select id="building" name="building" required>
+                    <option value="">Loading locations...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="floor">Floor</label>
+                <select id="floor" name="floor" required disabled>
+                    <option value="">Select a building first</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="area">Area / Room</label>
+                <select id="area" name="area" required disabled>
+                    <option value="">Select a floor first</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Priority</label>
+                <div class="card-subtitle">
+                    To be assessed by the Administrator
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="6"
+                placeholder="Describe the concern clearly, including any important details."
+                required></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="supportingPhoto">
+                Supporting Photo <span style="color:#b42318;">*</span>
+            </label>
+            <input id="supportingPhoto" name="supportingPhoto"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                required>
+            <div id="photoPreview" class="card-subtitle"
+                style="margin-top:10px;">
+                A photo is required to support your report.
+            </div>
+        </div>
+
+        <div class="card-subtitle" style="margin:18px 0;">
+            <label style="display:flex;gap:10px;align-items:flex-start;">
+                <input id="confirmation" type="checkbox" required>
+                <span>
+                    I confirm that the information provided is accurate
+                    and related to an actual campus concern.
+                </span>
+            </label>
+        </div>
+
+        <div class="actions">
+            <a class="btn" href="dashboard.html">Cancel</a>
+            <button class="btn gold" id="submitButton" type="submit">
+                Submit Concern
+            </button>
+        </div>
+
+        <div id="formMessage" class="card-subtitle"
+            style="margin-top:16px;" role="status" aria-live="polite"></div>
+    </form>
+</div>`;
+
+const footer = `
+<footer class="footer">
+    <div class="footer-grid">
+        <div>
+            <h4>CampusVoice</h4>
+            <div class="goldline"></div>
+            <p>
+                A web-based concern management system
+                for City of Malabon University.
+            </p>
+        </div>
+        <div>
+            <h4>Get in Touch</h4>
+            <p>Pampano cor. Maya-Maya Sts., Longos, Malabon City</p>
+            <p>cmuofficial@cityofmalabonuniversity.edu.ph</p>
+        </div>
+        <div>
+            <h4>Quick Links</h4>
+            <a href="help.html">Help &amp; Support</a>
+            <a href="profile.html">My Profile</a>
+        </div>
+    </div>
+</footer>`;
+
+shell(
+    "report.html",
+    "Report a Concern",
+    "Submit a campus issue for review and appropriate action.",
+    content,
+    footer
+);
+
+async function initializePage() {
+    try {
+        const { data: { user }, error } =
+            await supabaseClient.auth.getUser();
+
+        if (error || !user) {
+            window.location.href = "../index.html";
+            return;
+        }
+
+        currentUser = user;
+
+        await Promise.all([
+            loadCategories(),
+            loadLocations()
+        ]);
+    } catch (error) {
+        console.error("Page initialization failed:", error);
+        showMessage("Unable to initialize the report form. Please refresh the page.");
+    }
+}
+
+async function loadCategories() {
+    const select = document.getElementById("category");
+
+    const { data, error } = await supabaseClient
+        .from("categories")
+        .select("category_id, category_name")
+        .eq("status", "active")
+        .order("category_name");
+
+    if (error) {
+        console.error("Category loading failed:", error);
+        select.innerHTML = `<option value="">Unable to load categories</option>`;
+        showMessage("Unable to load categories. Please refresh the page.");
+        return;
+    }
+
+    select.innerHTML = `<option value="">Select a category</option>`;
+
+    (data || []).forEach(category => {
+        const option = document.createElement("option");
+        option.value = category.category_id;
+        option.textContent = category.category_name;
+        select.appendChild(option);
+    });
+}
+
+async function loadLocations() {
+    const select = document.getElementById("building");
+
+    const { data, error } = await supabaseClient
+        .from("locations")
+        .select("location_id, building, floor, area")
+        .eq("status", "active")
+        .order("building")
+        .order("floor")
+        .order("area");
+
+    if (error) {
+        console.error("Location loading failed:", error);
+        select.innerHTML = `<option value="">Unable to load locations</option>`;
+        showMessage("Unable to load locations. Please refresh the page.");
+        return;
+    }
+
+    window.campusLocations = data || [];
+
+    const buildings = [
+        ...new Set(window.campusLocations.map(item => item.building))
+    ];
+
+    select.innerHTML = `<option value="">Select a building</option>`;
+
+    buildings.forEach(building => {
+        const option = document.createElement("option");
+        option.value = building;
+        option.textContent = building;
+        select.appendChild(option);
+    });
+
+    if (!buildings.length) {
+        select.innerHTML = `<option value="">No locations available yet</option>`;
+    }
+}
+
+function loadFloors(building) {
+    const floorSelect = document.getElementById("floor");
+    const areaSelect = document.getElementById("area");
+
+    floorSelect.innerHTML = `<option value="">Select a floor</option>`;
+    areaSelect.innerHTML = `<option value="">Select a floor first</option>`;
+    areaSelect.disabled = true;
+
+    if (!building) {
+        floorSelect.disabled = true;
+        return;
+    }
+
+    const floors = [
+        ...new Set(
+            window.campusLocations
+                .filter(item => item.building === building)
+                .map(item => item.floor)
+        )
+    ];
+
+    floors.forEach(floor => {
+        const option = document.createElement("option");
+        option.value = floor;
+        option.textContent = floor;
+        floorSelect.appendChild(option);
+    });
+
+    floorSelect.disabled = false;
+}
+
+function loadAreas(building, floor) {
+    const areaSelect = document.getElementById("area");
+    areaSelect.innerHTML = `<option value="">Select an area or room</option>`;
+
+    if (!building || !floor) {
+        areaSelect.disabled = true;
+        return;
+    }
+
+    const locations = window.campusLocations.filter(
+        item => item.building === building && item.floor === floor
+    );
+
+    locations.forEach(location => {
+        const option = document.createElement("option");
+        option.value = location.location_id;
+        option.textContent = location.area;
+        areaSelect.appendChild(option);
+    });
+
+    areaSelect.disabled = false;
+}
+
+function showPhotoPreview(file) {
+    const preview = document.getElementById("photoPreview");
+    const photoInput = document.getElementById("supportingPhoto");
+
+    if (!file) {
+        preview.textContent = "A photo is required to support your report.";
+        selectedPhoto = null;
+        return;
+    }
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        alert("Please upload a JPG, PNG, or WebP image.");
+        photoInput.value = "";
+        selectedPhoto = null;
+        showPhotoPreview(null);
+        return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+        alert("The photo must be 10 MB or smaller.");
+        photoInput.value = "";
+        selectedPhoto = null;
+        showPhotoPreview(null);
+        return;
+    }
+
+    selectedPhoto = file;
+
+    const reader = new FileReader();
+
+    reader.onload = event => {
+        preview.innerHTML = `
+            <div style="margin-top:10px;">
+                <img
+                    src="${event.target.result}"
+                    alt="Selected supporting photo"
+                    style="max-width:240px;max-height:180px;
+                           border-radius:12px;object-fit:cover;display:block;">
+            </div>`;
+    };
+
+    reader.readAsDataURL(file);
+}
+
+function showMessage(message) {
+    const element = document.getElementById("formMessage");
+    if (element) element.textContent = message;
+}
+
+async function submitConcern(event) {
+    event.preventDefault();
+
+    if (isSubmitting) return;
+
+    const form = document.getElementById("concernForm");
+    const button = document.getElementById("submitButton");
+
+    if (!form.reportValidity()) return;
+
+    const categoryId = document.getElementById("category").value;
+    const locationId = document.getElementById("area").value;
+    const title = document.getElementById("title").value.trim();
+    const description = document.getElementById("description").value.trim();
+
+    if (!currentUser) {
+        showMessage("Your session could not be verified. Please sign in again.");
+        return;
+    }
+
+    if (!selectedPhoto) {
+        showMessage("Please upload a supporting photo.");
+        return;
+    }
+
+    if (!categoryId || !locationId) {
+        showMessage("Please complete the category and location.");
+        return;
+    }
+
+    isSubmitting = true;
+    button.disabled = true;
+    button.textContent = "Submitting...";
+    showMessage("Submitting your concern...");
+
+    let createdConcern = null;
+    let uploadedFilePath = null;
+
+    try {
+        const { data: statusData, error: statusError } =
+            await supabaseClient
+                .from("statuses")
+                .select("status_id")
+                .eq("status_name", "Submitted")
+                .single();
+
+        if (statusError) throw statusError;
+
+        const { data: concern, error: concernError } =
+            await supabaseClient
+                .from("concerns")
+                .insert({
+                    student_id: currentUser.id,
+                    category_id: Number(categoryId),
+                    location_id: Number(locationId),
+                    status_id: statusData.status_id,
+                    title,
+                    description
+                })
+                .select("concern_id, concern_code")
+                .single();
+
+        if (concernError) throw concernError;
+
+        createdConcern = concern;
+
+        const extension = selectedPhoto.name.split(".").pop().toLowerCase();
+        const safeExtension = ["jpg", "jpeg", "png", "webp"].includes(extension)
+            ? extension
+            : "jpg";
+
+        uploadedFilePath =
+            `${currentUser.id}/${concern.concern_id}-${crypto.randomUUID()}.${safeExtension}`;
+
+        const { error: uploadError } = await supabaseClient
+            .storage
+            .from("concern-photos")
+            .upload(uploadedFilePath, selectedPhoto, {
+                contentType: selectedPhoto.type,
+                upsert: false
+            });
+
+        if (uploadError) throw uploadError;
+
+        const { error: photoError } = await supabaseClient
+            .from("photos")
+            .insert({
+                concern_id: concern.concern_id,
+                uploaded_by: currentUser.id,
+                photo_type: "supporting",
+                file_path: uploadedFilePath
+            });
+
+        if (photoError) {
+            console.error("Photo record insert failed:", {
+                message: photoError.message,
+                code: photoError.code,
+                details: photoError.details,
+                hint: photoError.hint
+            });
+
+            // Keep the concern and uploaded file for diagnosis.
+            // Do not create another concern automatically.
+            button.textContent = "Concern Created";
+            showMessage(
+                `Your concern (${concern.concern_code || concern.concern_id}) was created, ` +
+                `but saving its photo record failed: ${photoError.message}. ` +
+                `Please do not submit it again. Contact the system administrator.`
+            );
+            return;
+        }
+
+        showMessage(
+            `Concern submitted successfully. Concern ID: ` +
+            `${concern.concern_code || concern.concern_id}`
+        );
+
+        button.textContent = "Submitted";
+        form.reset();
+        selectedPhoto = null;
+
+        document.getElementById("floor").disabled = true;
+        document.getElementById("area").disabled = true;
+        showPhotoPreview(null);
+
+        setTimeout(() => {
+            window.location.href = "concerns.html";
+        }, 1800);
+
+    } catch (error) {
+        console.error("Concern submission failed:", error);
+
+        if (createdConcern) {
+            button.textContent = "Concern Created";
+            showMessage(
+                `Concern ${createdConcern.concern_code || createdConcern.concern_id} ` +
+                `was created, but a later step failed: ${error.message}. ` +
+                `Please do not submit again. Check this concern in My Concerns.`
+            );
+            return;
+        }
+
+        showMessage(
+            error.message || "Unable to submit the concern. Please try again."
+        );
+
+        button.disabled = false;
+        button.textContent = "Submit Concern";
+        isSubmitting = false;
+    }
+}
+
+document.addEventListener("change", event => {
+    if (event.target.id === "building") {
+        loadFloors(event.target.value);
+    }
+
+    if (event.target.id === "floor") {
+        loadAreas(
+            document.getElementById("building").value,
+            event.target.value
+        );
+    }
+
+    if (event.target.id === "supportingPhoto") {
+        showPhotoPreview(event.target.files[0]);
+    }
+});
+
+document.addEventListener("submit", event => {
+    if (event.target.id === "concernForm") {
+        submitConcern(event);
+    }
+});
+
+initializePage();
+</script>
+
+</body>
+</html>

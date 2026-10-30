@@ -1,0 +1,634 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Users | CampusVoice</title>
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/admin.css">
+</head>
+<body>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/supabase-config.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/shell.js"></script>
+
+  <script>
+    const supabaseClient = window.campusVoiceSupabase;
+    function toast(message) {
+  let notice = document.getElementById("usersToast");
+
+  if (!notice) {
+    notice = document.createElement("div");
+    notice.id = "usersToast";
+    notice.style.cssText =
+      "position:fixed;bottom:24px;right:24px;z-index:99999;" +
+      "background:#173b32;color:white;padding:14px 20px;" +
+      "border-radius:10px;max-width:360px;box-shadow:0 4px 18px #0002;";
+    document.body.appendChild(notice);
+  }
+
+  notice.textContent = message;
+  notice.style.display = "block";
+}
+
+    let users = [];
+    let departments = [];
+    let currentUserId = null;
+
+    function usersRoleLabel(role) {
+      const labels = {
+        student: "Student",
+        staff: "Staff",
+        admin: "Administrator"
+      };
+      return labels[role] || role || "—";
+    }
+
+    function usersStatusLabel(status) {
+      const labels = {
+        active: "Active",
+        inactive: "Inactive",
+        suspended: "Suspended"
+      };
+      return labels[status] || status || "—";
+    }
+
+    function userName(user) {
+      return [
+        user.first_name,
+        user.middle_initial,
+        user.last_name
+      ].filter(Boolean).join(" ");
+    }
+
+    function userIdentifier(user) {
+      return user.student_id ||
+        user.staff_id ||
+        user.admin_id ||
+        "—";
+    }
+
+    function departmentName(id) {
+      const department = departments.find(
+        item => String(item.department_id) === String(id)
+      );
+      return department ? department.department_name : "—";
+    }
+
+    async function loadDepartments() {
+      const { data, error } = await supabaseClient
+        .from("departments")
+        .select("department_id, department_name, department_type")
+        .order("department_name");
+
+      if (error) throw error;
+      departments = data || [];
+    }
+
+    async function loadUsers() {
+      const { data, error } = await supabaseClient
+        .from("users")
+        .select(`
+          user_id,
+          student_id,
+          staff_id,
+          admin_id,
+          first_name,
+          middle_initial,
+          last_name,
+          email,
+          role,
+          department_id,
+          position,
+          coverage,
+          contact_number,
+          profile_picture,
+          account_status,
+          created_at,
+          updated_at
+        `)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      users = data || [];
+      renderUsers();
+    }
+
+    function renderUsers() {
+      const search = document.getElementById("search").value
+        .trim().toLowerCase();
+      const role = document.getElementById("role").value;
+      const status = document.getElementById("status").value;
+
+      const filtered = users.filter(user => {
+        const searchable = [
+          userName(user),
+          userIdentifier(user),
+          user.email,
+          departmentName(user.department_id)
+        ].filter(Boolean).join(" ").toLowerCase();
+
+        return (
+          (!search || searchable.includes(search)) &&
+          (role === "All" || user.role === role) &&
+          (status === "All" || user.account_status === status)
+        );
+      });
+
+      document.getElementById("rows").innerHTML =
+        filtered.map(user => `
+          <tr>
+            <td><strong>${esc(userName(user) || "Unnamed user")}</strong></td>
+            <td>${esc(userIdentifier(user))}</td>
+            <td>${esc(user.email || "—")}</td>
+            <td>${esc(usersRoleLabel(user.role))}</td>
+            <td>${esc(departmentName(user.department_id))}</td>
+            <td>
+              <span class="location-status ${
+                user.account_status === "active" ? "active" : "inactive"
+              }">
+                ${esc(usersStatusLabel(user.account_status))}
+              </span>
+            </td>
+            <td>
+              <div class="location-actions">
+                <button class="btn small" type="button"
+                  data-edit-user="${esc(user.user_id)}">
+                  Edit
+                </button>
+              </div>
+            </td>
+          </tr>
+        `).join("") ||
+        `<tr><td colspan="7" class="empty">No users found.</td></tr>`;
+
+      document.getElementById("count").textContent =
+        `${filtered.length} account${filtered.length === 1 ? "" : "s"}`;
+    }
+
+    const content = `
+      <div class="toolbar">
+        <input id="search" type="search"
+          placeholder="Search name, ID, email, department...">
+
+        <select id="role">
+          <option value="All">All Roles</option>
+          <option value="student">Student</option>
+          <option value="staff">Staff</option>
+          <option value="admin">Administrator</option>
+        </select>
+
+        <select id="status">
+          <option value="All">All Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="suspended">Suspended</option>
+        </select>
+
+        <button class="btn primary" id="addUserButton" type="button">
+  + Add Staff
+</button>
+      </div>
+
+      <div class="alert info">
+        Students register through Student Signup. Staff and Administrator
+        accounts require secure server-side account creation.
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h3 class="card-title">User Management</h3>
+            <div class="card-subtitle">
+              Manage student, staff, and administrative accounts.
+            </div>
+          </div>
+          <span id="count" class="filter-count">Loading...</span>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>ID</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Department / Work Area</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="rows">
+              <tr><td colspan="7" class="empty">Loading users...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    shell(
+      "users.html",
+      "Users",
+      "Manage student, staff, and administrative accounts.",
+      content,
+      ""
+    );
+
+    document.getElementById("search")
+      .addEventListener("input", renderUsers);
+
+    document.getElementById("role")
+      .addEventListener("change", renderUsers);
+
+    document.getElementById("status")
+      .addEventListener("change", renderUsers);
+
+    document.getElementById("rows").addEventListener("click", event => {
+      const button = event.target.closest("[data-edit-user]");
+      if (button) editUser(button.dataset.editUser);
+    });
+
+    
+
+document.getElementById("addUserButton").addEventListener("click", () => {
+  const box = modal("Add Staff Account", `
+    <div class="form-grid">
+      <div class="field">
+        <label for="newFirst">First Name *</label>
+        <input id="newFirst" required>
+      </div>
+      <div class="field">
+        <label for="newMiddle">Middle Initial</label>
+        <input id="newMiddle" maxlength="4">
+      </div>
+      <div class="field">
+        <label for="newLast">Last Name *</label>
+        <input id="newLast" required>
+      </div>
+      <div class="field">
+        <label for="newStaffId">Staff ID *</label>
+        <input id="newStaffId" required>
+      </div>
+      <div class="field full">
+        <label for="newEmail">Email Address *</label>
+        <input id="newEmail" type="email" required>
+      </div>
+      <div class="field full">
+        <label for="newDepartment">Department / Work Area *</label>
+        <select id="newDepartment" required>
+          <option value="">Select department</option>
+          ${departments.map(d =>
+  `<option value="${d.department_id}">${esc(d.department_name)}</option>`
+).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label for="newPosition">Position</label>
+        <select id="newPosition">
+          <option value="">Select position</option>
+          <option>Maintenance Staff</option>
+          <option>IT Staff</option>
+          <option>Security Personnel</option>
+          <option>General Services Staff</option>
+          <option>Administrative Staff</option>
+          <option>Department Head</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="newCoverage">Coverage</label>
+        <select id="newCoverage">
+          <option value="">Select coverage</option>
+          <option>Facilities</option>
+          <option>Electrical</option>
+          <option>Plumbing & Water</option>
+          <option>Cleanliness & Sanitation</option>
+          <option>IT & Internet</option>
+          <option>Safety & Security</option>
+          <option>Lost & Found</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="newContact">Contact Number</label>
+        <input id="newContact" type="tel">
+      </div>
+      <div class="field">
+        <label for="newPassword">Temporary Password *</label>
+        <input id="newPassword" type="password" minlength="8" required>
+      </div>
+    </div>
+    <p style="font-size:12px;color:#64748b;margin-top:12px">
+      Fields marked * are required. Password must contain at least 8 characters.
+    </p>
+  `, `
+    <button class="btn" type="button" id="cancelAddStaff">Cancel</button>
+    <button class="btn primary" type="button" id="saveNewStaff">Create Staff Account</button>
+  `);
+
+  box.querySelector("#cancelAddStaff").addEventListener("click", () => {
+    box.querySelector("[data-close], .modal-close, .close-modal")?.click();
+  });
+
+  box.querySelector("#saveNewStaff").addEventListener("click", async () => {
+    const firstName = box.querySelector("#newFirst").value.trim();
+    const middleInitial = box.querySelector("#newMiddle").value.trim();
+    const lastName = box.querySelector("#newLast").value.trim();
+    const staffId = box.querySelector("#newStaffId").value.trim();
+    const email = box.querySelector("#newEmail").value.trim().toLowerCase();
+    const departmentId = Number(box.querySelector("#newDepartment").value);
+    const position = box.querySelector("#newPosition").value;
+    const coverage = box.querySelector("#newCoverage").value;
+    const contactNumber = box.querySelector("#newContact").value.trim();
+    const password = box.querySelector("#newPassword").value;
+
+    if (!firstName || !lastName || !staffId || !email || !departmentId || !password) {
+      toast("Please complete all required fields.");
+      return;
+    }
+
+    if (password.length < 8) {
+      toast("Password must be at least 8 characters.");
+      return;
+    }
+
+    const saveButton = box.querySelector("#saveNewStaff");
+    saveButton.disabled = true;
+    saveButton.textContent = "Creating...";
+
+    try {
+      const { data, error } = await supabaseClient.functions.invoke("smart-processor", {
+        body: {
+          role: "staff",
+          firstName,
+          middleInitial,
+          lastName,
+          email,
+          staffId,
+          departmentId,
+          position,
+          coverage,
+          contactNumber,
+          password
+        }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast("Staff account created successfully.");
+
+const modalElement = box.closest(".modal-overlay") || box.parentElement;
+box.querySelector("[data-close], .modal-close, .close-modal")?.click();
+
+if (modalElement && document.body.contains(modalElement)) {
+  modalElement.remove();
+}
+
+await loadUsers();
+    } catch (error) {
+      console.error("Create staff account failed:", error);
+      toast("Failed to create account: " + (error.message || "Please try again."));
+      saveButton.disabled = false;
+      saveButton.textContent = "Create Staff Account";
+    }
+  });
+});
+
+
+    async function editUser(id) {
+      const user = users.find(item => item.user_id === id);
+
+      if (!user) {
+        toast("User not found.");
+        return;
+      }
+
+      const box = modal("Edit User", `
+        <div class="form-grid">
+          <div class="field">
+            <label for="editFirst">First Name</label>
+            <input id="editFirst" value="${esc(user.first_name || "")}" required>
+          </div>
+
+          <div class="field">
+            <label for="editMiddle">Middle Initial</label>
+            <input id="editMiddle" maxlength="4"
+              value="${esc(user.middle_initial || "")}">
+          </div>
+
+          <div class="field">
+            <label for="editLast">Last Name</label>
+            <input id="editLast" value="${esc(user.last_name || "")}" required>
+          </div>
+
+          <div class="field">
+            <label>Role</label>
+            <input value="${esc(usersRoleLabel(user.role))}" disabled>
+          </div>
+
+          <div class="field">
+            <label>Email</label>
+            <input value="${esc(user.email || "")}" disabled>
+          </div>
+
+          <div class="field">
+            <label>ID</label>
+            <input value="${esc(userIdentifier(user))}" disabled>
+          </div>
+
+          <div class="field full">
+            <label for="editDepartment">Department / Work Area</label>
+            <select id="editDepartment">
+              <option value="">No department</option>
+              ${departments.map(department => `
+                <option value="${department.department_id}"
+                  ${String(user.department_id) === String(department.department_id)
+                    ? "selected" : ""}>
+                  ${esc(department.department_name)}
+                </option>
+              `).join("")}
+            </select>
+          </div>
+
+                <div class="field">
+        <label for="editPosition">Position</label>
+        <select id="editPosition">
+            <option value="">Select Position</option>
+            <option value="Maintenance Staff">Maintenance Staff</option>
+            <option value="IT Staff">IT Staff</option>
+            <option value="Security Personnel">Security Personnel</option>
+            <option value="General Services Staff">General Services Staff</option>
+            <option value="Department Head">Department Head</option>
+            <option value="Administrative Staff">Administrative Staff</option>
+            <option value="Other">Other</option>
+        </select>
+        </div>
+
+                <div class="field">
+        <label for="editCoverage">Coverage</label>
+        <select id="editCoverage">
+            <option value="">Select Coverage</option>
+            <option value="Facilities">Facilities</option>
+            <option value="Electrical">Electrical</option>
+            <option value="Plumbing & Water">Plumbing & Water</option>
+            <option value="Cleanliness & Sanitation">Cleanliness & Sanitation</option>
+            <option value="IT & Internet">IT & Internet</option>
+            <option value="Safety & Security">Safety & Security</option>
+            <option value="Lost & Found">Lost & Found</option>
+            <option value="Other">Other</option>
+        </select>
+        </div>
+
+          <div class="field">
+            <label for="editContact">Contact Number</label>
+            <input id="editContact" type="tel"
+              value="${esc(user.contact_number || "")}">
+          </div>
+
+          <div class="field">
+            <label for="editStatus">Account Status</label>
+            <select id="editStatus">
+              <option value="active"
+                ${user.account_status === "active" ? "selected" : ""}>
+                Active
+              </option>
+              <option value="inactive"
+                ${user.account_status === "inactive" ? "selected" : ""}>
+                Inactive
+              </option>
+              <option value="suspended"
+                ${user.account_status === "suspended" ? "selected" : ""}>
+                Suspended
+              </option>
+            </select>
+          </div>
+        </div>
+      `, `
+        <button class="btn" type="button" id="cancelEdit">Cancel</button>
+        <button class="btn primary" type="button" id="saveUser">
+          Save Changes
+        </button>
+      `);
+
+      const saveButton = box.querySelector("#saveUser");
+      const cancelButton = box.querySelector("#cancelEdit");
+
+      cancelButton.addEventListener("click", () => {
+        box.querySelector("[data-close], .modal-close, .close-modal")?.click();
+      });
+
+      saveButton.addEventListener("click", async () => {
+        const firstName = box.querySelector("#editFirst").value.trim();
+        const middleInitial = box.querySelector("#editMiddle").value.trim();
+        const lastName = box.querySelector("#editLast").value.trim();
+        const newStatus = box.querySelector("#editStatus").value;
+
+        if (!firstName || !lastName) {
+          toast("First name and last name are required.");
+          return;
+        }
+
+        if (id === currentUserId && newStatus !== user.account_status) {
+          toast("You cannot change your own account status.");
+          return;
+        }
+
+        saveButton.disabled = true;
+        saveButton.textContent = "Saving...";
+
+        const departmentValue =
+          box.querySelector("#editDepartment").value;
+
+        const updates = {
+          first_name: firstName,
+          middle_initial: middleInitial || null,
+          last_name: lastName,
+          department_id: departmentValue ? Number(departmentValue) : null,
+          position: box.querySelector("#editPosition").value.trim() || null,
+          coverage: box.querySelector("#editCoverage").value.trim() || null,
+          contact_number: box.querySelector("#editContact").value.trim() || null,
+          account_status: newStatus,
+          updated_at: new Date().toISOString()
+        };
+
+        const { error } = await supabaseClient
+          .from("users")
+          .update(updates)
+          .eq("user_id", id);
+
+        if (error) {
+          console.error("Update user failed:", error);
+          toast(error.message || "Unable to update user.");
+          saveButton.disabled = false;
+          saveButton.textContent = "Save Changes";
+          return;
+        }
+
+        toast("User updated successfully.");
+        await loadUsers();
+
+        box.querySelector("[data-close], .modal-close, .close-modal")?.click();
+      });
+    }
+
+    async function initializePage() {
+      try {
+        if (!supabaseClient) {
+          throw new Error("Supabase client is missing. Check your configuration.");
+        }
+
+        const { data: authData, error: authError } =
+          await supabaseClient.auth.getUser();
+
+        if (authError || !authData.user) {
+          location.href = "../index.html";
+          return;
+        }
+
+        currentUserId = authData.user.id;
+
+        const { data: profile, error: profileError } =
+          await supabaseClient
+            .from("users")
+            .select("role, account_status")
+            .eq("user_id", currentUserId)
+            .maybeSingle();
+
+        if (profileError) throw profileError;
+
+        if (
+    !profile ||
+    profile.role !== "admin" ||
+    profile.account_status !== "active"
+) {
+    toast("You are not authorized to access User Management.");
+    location.href = "../index.html";
+    return;
+}
+
+        await loadDepartments();
+        await loadUsers();
+      } catch (error) {
+        console.error("Users page error:", error);
+
+        document.getElementById("rows").innerHTML = `
+          <tr>
+            <td colspan="7" class="empty">
+              Unable to load users. Check the browser Console and Supabase RLS policies.
+            </td>
+          </tr>`;
+
+        document.getElementById("count").textContent = "Load failed";
+        toast(error.message || "Unable to load User Management.");
+      }
+    }
+
+    initializePage();
+  </script>
+</body>
+</html>

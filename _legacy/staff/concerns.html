@@ -1,0 +1,456 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>My Assignments | CampusVoice</title>
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/staff.css">
+</head>
+<body>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/shell.js"></script>
+
+<script>
+const supabaseClient = window.campusVoiceSupabase;
+const params = new URLSearchParams(location.search);
+const requestedStatus = params.get("status") || "All";
+const attention = params.get("attention") === "1";
+
+let allConcerns = [];
+let statuses = [];
+let categories = [];
+let priorities = [];
+let currentProfile = null;
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function formatDate(value) {
+    if (!value) return "—";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return "—";
+
+    return date.toLocaleDateString("en-PH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+    });
+}
+
+function showError(message) {
+    shell(
+        "concerns.html",
+        "My Assignments",
+        "Review and manage concerns assigned to you.",
+        `
+            <div class="card">
+                <h3 class="card-title">Unable to Load Assignments</h3>
+                <p>${escapeHtml(message)}</p>
+                <button class="btn" onclick="location.reload()">
+                    Try Again
+                </button>
+            </div>
+        `,
+        ""
+    );
+}
+
+function render() {
+    const rows = document.getElementById("rows");
+    if (!rows) return;
+
+    const query = (
+        document.getElementById("search")?.value || ""
+    ).trim().toLowerCase();
+
+    const selectedStatus =
+        document.getElementById("status")?.value || "All";
+
+    const selectedCategory =
+        document.getElementById("category")?.value || "All";
+
+    const selectedPriority =
+        document.getElementById("priority")?.value || "All";
+
+    const filtered = allConcerns.filter(concern => {
+        const matchesAttention =
+            !attention ||
+            [
+                "Assigned",
+                "In Progress",
+                "Waiting for Resources",
+                "Reopened"
+            ].includes(concern.status);
+
+        const matchesStatus =
+            selectedStatus === "All" ||
+            concern.status === selectedStatus;
+
+        const matchesCategory =
+            selectedCategory === "All" ||
+            concern.category === selectedCategory;
+
+        const matchesPriority =
+            selectedPriority === "All" ||
+            concern.priority === selectedPriority;
+
+        const searchable = [
+            concern.concern_code,
+            concern.concern_id,
+            concern.title,
+            concern.category,
+            concern.building,
+            concern.area
+        ].join(" ").toLowerCase();
+
+        return matchesAttention &&
+            matchesStatus &&
+            matchesCategory &&
+            matchesPriority &&
+            (!query || searchable.includes(query));
+    });
+
+    rows.innerHTML = filtered.map(concern => `
+        <tr>
+            <td>
+                <a class="link"
+                   href="concern-details.html?id=${encodeURIComponent(concern.concern_id)}">
+                    ${escapeHtml(concern.concern_code || concern.concern_id)}
+                </a>
+            </td>
+            <td>
+                <strong>${escapeHtml(concern.title)}</strong>
+                <br>
+                <span class="card-subtitle">
+                    ${escapeHtml(concern.building)}
+                    · ${escapeHtml(concern.area)}
+                </span>
+            </td>
+            <td>${escapeHtml(concern.category)}</td>
+            <td>
+                ${typeof priority === "function"
+                    ? priority(concern.priority)
+                    : escapeHtml(concern.priority)}
+            </td>
+            <td>
+                ${typeof badge === "function"
+                    ? badge(concern.status)
+                    : escapeHtml(concern.status)}
+            </td>
+            <td>${formatDate(concern.date_submitted || concern.created_at)}</td>
+            <td>
+                <a class="btn small"
+                   href="concern-details.html?id=${encodeURIComponent(concern.concern_id)}">
+                    Review
+                </a>
+            </td>
+        </tr>
+    `).join("") || `
+        <tr>
+            <td colspan="7" class="empty">
+                No assigned concerns match the current filters.
+            </td>
+        </tr>
+    `;
+
+    const count = document.getElementById("count");
+    if (count) {
+        count.textContent =
+            `${filtered.length} concern${filtered.length === 1 ? "" : "s"}`;
+    }
+}
+
+async function loadAssignments() {
+    try {
+        if (!supabaseClient) {
+            throw new Error(
+                "Supabase client is unavailable. Check js/supabase-config.js."
+            );
+        }
+
+        const {
+            data: authData,
+            error: authError
+        } = await supabaseClient.auth.getUser();
+
+        if (authError) throw authError;
+
+        const user = authData.user;
+
+        if (!user) {
+            location.href = "../index.html";
+            return;
+        }
+
+        const {
+            data: profile,
+            error: profileError
+        } = await supabaseClient
+            .from("users")
+            .select("user_id, role, account_status")
+            .eq("user_id", user.id)
+            .single();
+
+        if (profileError) throw profileError;
+
+        if (
+            profile.role !== "staff" ||
+            profile.account_status !== "active"
+        ) {
+            throw new Error("An active staff account is required.");
+        }
+
+        currentProfile = profile;
+
+        // Get current assignments for this staff member.
+        const {
+            data: assignments,
+            error: assignmentError
+        } = await supabaseClient
+            .from("assignments")
+            .select("assignment_id, concern_id, assignment_status, assigned_at")
+            .eq("staff_id", user.id)
+            .eq("assignment_status", "active")
+            .order("assigned_at", { ascending: false });
+
+        if (assignmentError) throw assignmentError;
+
+        const concernIds = [
+            ...new Set((assignments || []).map(a => a.concern_id))
+        ];
+
+        if (concernIds.length === 0) {
+            allConcerns = [];
+            statuses = [];
+            categories = [];
+            priorities = [];
+        } else {
+            const [
+                concernResult,
+                statusResult,
+                categoryResult,
+                locationResult,
+                priorityResult
+            ] = await Promise.all([
+                supabaseClient
+                    .from("concerns")
+                    .select(`
+                        concern_id,
+                        concern_code,
+                        title,
+                        description,
+                        date_submitted,
+                        created_at,
+                        status_id,
+                        priority_id,
+                        category_id,
+                        location_id
+                    `)
+                    .in("concern_id", concernIds)
+                    .order("date_submitted", { ascending: false }),
+
+                supabaseClient
+                    .from("statuses")
+                    .select("status_id, status_name")
+                    .order("status_id"),
+
+                supabaseClient
+                    .from("categories")
+                    .select("category_id, category_name")
+                    .order("category_name"),
+
+                supabaseClient
+                    .from("locations")
+                    .select("location_id, building, floor, area"),
+
+                supabaseClient
+                    .from("priorities")
+                    .select("priority_id, priority_name")
+                    .order("priority_id")
+            ]);
+
+            for (const result of [
+                concernResult,
+                statusResult,
+                categoryResult,
+                locationResult,
+                priorityResult
+            ]) {
+                if (result.error) throw result.error;
+            }
+
+            statuses = statusResult.data || [];
+            categories = categoryResult.data || [];
+            priorities = priorityResult.data || [];
+
+            const statusMap = new Map(
+                statuses.map(item => [
+                    String(item.status_id),
+                    item.status_name
+                ])
+            );
+
+            const categoryMap = new Map(
+                categories.map(item => [
+                    String(item.category_id),
+                    item.category_name
+                ])
+            );
+
+            const locationMap = new Map(
+                (locationResult.data || []).map(item => [
+                    String(item.location_id),
+                    item
+                ])
+            );
+
+            const priorityMap = new Map(
+                priorities.map(item => [
+                    String(item.priority_id),
+                    item.priority_name
+                ])
+            );
+
+            allConcerns = (concernResult.data || []).map(concern => {
+                const location =
+                    locationMap.get(String(concern.location_id)) || {};
+
+                return {
+                    ...concern,
+                    status:
+                        statusMap.get(String(concern.status_id)) || "Submitted",
+                    category:
+                        categoryMap.get(String(concern.category_id)) || "—",
+                    priority:
+                        priorityMap.get(String(concern.priority_id)) ||
+                        "To be assessed",
+                    building: location.building || "—",
+                    area: [
+                        location.floor,
+                        location.area
+                    ].filter(Boolean).join(" · ") || "—"
+                };
+            });
+        }
+
+        const content = `
+            <div class="toolbar">
+                <input id="search"
+                    placeholder="Search assigned concerns..."
+                    aria-label="Search assigned concerns">
+
+                <select id="status" aria-label="Filter by status">
+                    <option value="All">All statuses</option>
+                    ${statuses.map(item => `
+                        <option value="${escapeHtml(item.status_name)}"
+                            ${item.status_name === requestedStatus ? "selected" : ""}>
+                            ${escapeHtml(item.status_name)}
+                        </option>
+                    `).join("")}
+                </select>
+
+                <select id="category" aria-label="Filter by category">
+                    <option value="All">All categories</option>
+                    ${categories.map(item => `
+                        <option value="${escapeHtml(item.category_name)}">
+                            ${escapeHtml(item.category_name)}
+                        </option>
+                    `).join("")}
+                </select>
+
+                <select id="priority" aria-label="Filter by priority">
+                    <option value="All">All priorities</option>
+                    ${priorities.map(item => `
+                        <option value="${escapeHtml(item.priority_name)}">
+                            ${escapeHtml(item.priority_name)}
+                        </option>
+                    `).join("")}
+                </select>
+            </div>
+
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <h3 class="card-title">My Assignments</h3>
+                        <div class="card-subtitle">
+                            Only concerns actively assigned to your account are shown.
+                            ${attention ? " Showing items that need action or follow-up." : ""}
+                        </div>
+                    </div>
+                    <span class="staff-badge">STAFF</span>
+                </div>
+
+                <div class="card-subtitle" id="count"
+                     style="margin:0 0 12px"></div>
+
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Concern ID</th>
+                                <th>Concern</th>
+                                <th>Category</th>
+                                <th>Priority</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="rows">
+                            <tr>
+                                <td colspan="7" class="empty">
+                                    Loading assigned concerns...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        shell(
+            "concerns.html",
+            "My Assignments",
+            "Review and manage only concerns assigned to you.",
+            content,
+            ""
+        );
+
+        ["search", "status", "category", "priority"].forEach(id => {
+            document.getElementById(id).addEventListener(
+                id === "search" ? "input" : "change",
+                render
+            );
+        });
+
+        render();
+
+    } catch (error) {
+        console.error("My Assignments loading error:", {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint
+        });
+
+        showError(error.message || "An unexpected error occurred.");
+    }
+}
+
+document.addEventListener("DOMContentLoaded", loadAssignments);
+</script>
+
+</body>
+</html>

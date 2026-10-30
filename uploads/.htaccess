@@ -1,0 +1,5 @@
+# Uploaded files are only served through /file.php (which checks permissions)
+Require all denied
+<FilesMatch "\.(php|phtml|phar|php[0-9])$">
+    Require all denied
+</FilesMatch>

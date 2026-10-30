@@ -1,0 +1,313 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>My Concerns | CampusVoice</title>
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/student.css">
+</head>
+<body>
+
+<script src="../js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/shell.js"></script>
+
+<script>
+const config = window.CAMPUSVOICE_SUPABASE || {};
+
+const supabaseClient = window.supabase.createClient(
+    config.url,
+    config.publishableKey
+);
+
+const params = new URLSearchParams(location.search);
+const requestedStatus = params.get("status") || "All";
+
+let allConcerns = [];
+let availableStatuses = [];
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function formatDate(value) {
+    if (!value) return "—";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return escapeHtml(value);
+
+    return date.toLocaleDateString("en-PH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+    });
+}
+
+function renderRows() {
+    const searchInput = document.getElementById("search");
+    const statusSelect = document.getElementById("status");
+    const rows = document.getElementById("rows");
+    const count = document.getElementById("count");
+
+    if (!rows) return;
+
+    const query = (searchInput?.value || "").trim().toLowerCase();
+    const selectedStatus = statusSelect?.value || "All";
+
+    const filtered = allConcerns.filter(concern => {
+        const matchesStatus =
+            selectedStatus === "All" ||
+            concern.status === selectedStatus;
+
+        const searchable = [
+            concern.concern_code,
+            concern.concern_id,
+            concern.title,
+            concern.category,
+            concern.building,
+            concern.area
+        ].join(" ").toLowerCase();
+
+        return matchesStatus && (!query || searchable.includes(query));
+    });
+
+    rows.innerHTML = filtered.map(concern => `
+        <tr>
+            <td>
+                <a class="link"
+                   href="concern-details.html?id=${encodeURIComponent(concern.concern_id)}">
+                    ${escapeHtml(concern.concern_code || concern.concern_id)}
+                </a>
+            </td>
+            <td>
+                <strong>${escapeHtml(concern.title)}</strong>
+                <br>
+                <span class="card-subtitle">
+                    ${escapeHtml(concern.building)}
+                    · ${escapeHtml(concern.area)}
+                </span>
+            </td>
+            <td>${escapeHtml(concern.category)}</td>
+            <td>${formatDate(concern.date_submitted || concern.created_at)}</td>
+            <td>
+                ${typeof badge === "function"
+                    ? badge(concern.status)
+                    : escapeHtml(concern.status)}
+            </td>
+            <td>
+                ${typeof priority === "function"
+                    ? priority(concern.priority)
+                    : escapeHtml(concern.priority)}
+            </td>
+            <td>
+                <a class="link"
+                   href="concern-details.html?id=${encodeURIComponent(concern.concern_id)}">
+                    View
+                </a>
+            </td>
+        </tr>
+    `).join("") || `
+        <tr>
+            <td colspan="7" class="empty">
+                No concerns found. Try changing your search or filter.
+            </td>
+        </tr>
+    `;
+
+    if (count) {
+        count.textContent = `${filtered.length} concern${filtered.length === 1 ? "" : "s"}`;
+    }
+}
+
+async function loadMyConcerns() {
+    try {
+        const {
+            data: { user },
+            error: authError
+        } = await supabaseClient.auth.getUser();
+
+        if (authError || !user) {
+            location.href = "../index.html";
+            return;
+        }
+
+        const { data: profile, error: profileError } =
+            await supabaseClient
+                .from("users")
+                .select("user_id, first_name, role, account_status")
+                .eq("user_id", user.id)
+                .single();
+
+        if (profileError) throw profileError;
+
+        if (
+            profile.role !== "student" ||
+            profile.account_status !== "active"
+        ) {
+            location.href = "../index.html";
+            return;
+        }
+
+        const results = await Promise.all([
+            supabaseClient
+                .from("concerns")
+                .select(`
+                    concern_id,
+                    concern_code,
+                    student_id,
+                    title,
+                    date_submitted,
+                    created_at,
+                    status_id,
+                    priority_id,
+                    category_id,
+                    location_id
+                `)
+                .eq("student_id", user.id)
+                .order("date_submitted", { ascending: false }),
+
+            supabaseClient
+                .from("statuses")
+                .select("status_id, status_name"),
+
+            supabaseClient
+                .from("categories")
+                .select("category_id, category_name"),
+
+            supabaseClient
+                .from("locations")
+                .select("location_id, building, floor, area"),
+
+            supabaseClient
+                .from("priorities")
+                .select("priority_id, priority_name")
+        ]);
+
+        const errorResult = results.find(result => result.error);
+        if (errorResult) throw errorResult.error;
+
+        const [concernResult, statusResult, categoryResult,
+               locationResult, priorityResult] = results;
+
+        const statuses = statusResult.data || [];
+        const categories = categoryResult.data || [];
+        const locations = locationResult.data || [];
+        const priorities = priorityResult.data || [];
+
+        const statusMap = new Map(
+            statuses.map(item => [String(item.status_id), item.status_name])
+        );
+        const categoryMap = new Map(
+            categories.map(item => [String(item.category_id), item.category_name])
+        );
+        const locationMap = new Map(
+            locations.map(item => [String(item.location_id), item])
+        );
+        const priorityMap = new Map(
+            priorities.map(item => [String(item.priority_id), item.priority_name])
+        );
+
+        availableStatuses = statuses.map(item => item.status_name);
+
+        allConcerns = (concernResult.data || []).map(concern => {
+            const loc = locationMap.get(String(concern.location_id)) || {};
+
+            return {
+                ...concern,
+                status: statusMap.get(String(concern.status_id)) || "Submitted",
+                category: categoryMap.get(String(concern.category_id)) || "—",
+                building: loc.building || "—",
+                area: [loc.floor, loc.area].filter(Boolean).join(" · ") || "—",
+                priority: priorityMap.get(String(concern.priority_id)) || "To be assessed"
+            };
+        });
+
+        const content = `
+            <div class="toolbar">
+                <input id="search"
+                    placeholder="Search Concern ID, title, category, location...">
+
+                <select id="status">
+                    <option value="All">All</option>
+                    ${availableStatuses.map(status => `
+                        <option value="${escapeHtml(status)}"
+                            ${status === requestedStatus ? "selected" : ""}>
+                            ${escapeHtml(status)}
+                        </option>
+                    `).join("")}
+                </select>
+
+                <a class="btn primary" href="report.html">＋ New Concern</a>
+            </div>
+
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <h3 class="card-title">My Concerns</h3>
+                        <div class="card-subtitle">
+                            Only concerns submitted by your account are shown here.
+                        </div>
+                    </div>
+                    <span class="filter-count" id="count"></span>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Concern ID</th>
+                                <th>Concern</th>
+                                <th>Category</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th>Priority</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="rows">
+                            <tr>
+                                <td colspan="7" class="empty">Loading your concerns...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        shell(
+            "concerns.html",
+            "My Concerns",
+            "Track every concern you have submitted.",
+            content,
+            ""
+        );
+
+        renderRows();
+
+        document.getElementById("search").addEventListener("input", renderRows);
+        document.getElementById("status").addEventListener("change", renderRows);
+
+    } catch (error) {
+        console.error("My Concerns loading error:", error);
+
+        document.body.innerHTML = `
+            <div style="padding:32px;font-family:Arial,sans-serif">
+                <h2>Unable to load My Concerns</h2>
+                <p>${escapeHtml(error.message || "An unexpected error occurred.")}</p>
+                <button class="btn" onclick="location.reload()">Try Again</button>
+            </div>
+        `;
+    }
+}
+
+document.addEventListener("DOMContentLoaded", loadMyConcerns);
+</script>
+</body>
+</html>

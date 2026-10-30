@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+
+  <title>CampusVoice | City of Malabon University</title>
+
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/login.css">
+</head>
+
+<body>
+
+  <div class="auth">
+
+    <section class="auth-left" id="campusPanel">
+
+      <div class="auth-left-inner">
+
+        <img
+          src="assets/cmu-logo.png"
+          alt="City of Malabon University"
+        >
+
+        <h1>CampusVoice</h1>
+
+        <div class="tag">
+          CITY OF MALABON UNIVERSITY · CONCERN MANAGEMENT SYSTEM
+        </div>
+
+        <p>
+          A centralized digital space where students can report campus
+          concerns and authorized university personnel can review,
+          assign, resolve, and monitor them.
+        </p>
+
+        <div class="feature">
+
+          <div class="feature-icon">
+            01
+          </div>
+
+          <div>
+            <b>Report with confidence</b>
+
+            <small>
+              Submit details, location, and supporting evidence in one place.
+            </small>
+          </div>
+
+        </div>
+
+
+        <div class="feature">
+
+          <div class="feature-icon">
+            02
+          </div>
+
+          <div>
+            <b>Track every update</b>
+
+            <small>
+              Follow the progress of your concern from submission to resolution.
+            </small>
+          </div>
+
+        </div>
+
+
+        <div class="feature">
+
+          <div class="feature-icon">
+            03
+          </div>
+
+          <div>
+            <b>One coordinated workflow</b>
+
+            <small>
+              Students, staff, and administrators work from the same concern record.
+            </small>
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div
+        class="campus-photo-switch"
+        aria-label="Campus photo selector"
+      >
+
+        <button
+          type="button"
+          class="active"
+          data-photo="one"
+          aria-label="Campus photo 1"
+        ></button>
+
+        <button
+          type="button"
+          data-photo="two"
+          aria-label="Campus photo 2"
+        ></button>
+
+      </div>
+
+    </section>
+
+
+    <section class="auth-right">
+
+      <div class="auth-card">
+
+        <h2>
+          Welcome back
+        </h2>
+
+        <p>
+          Sign in to continue to your CampusVoice portal.
+        </p>
+
+
+        <div
+          id="loginError"
+          class="auth-msg"
+        ></div>
+
+
+        <form id="loginForm">
+
+          <label>
+            University Email
+
+            <input
+              id="email"
+              type="email"
+              placeholder="name@cityofmalabonuniversity.edu.ph"
+              autocomplete="username"
+              enterkeyhint="next"
+              required
+            >
+          </label>
+
+
+          <label>
+            Password
+
+            <div class="password">
+
+              <input
+                id="password"
+                type="password"
+                placeholder="Enter your password"
+                autocomplete="current-password"
+                enterkeyhint="go"
+                required
+              >
+
+              <button
+                type="button"
+                id="togglePassword"
+              >
+                SHOW
+              </button>
+
+            </div>
+
+          </label>
+
+
+          <div class="auth-row">
+
+            <label class="check">
+
+              <input
+                id="remember"
+                type="checkbox"
+              >
+
+              Remember me
+
+            </label>
+
+
+            <a href="forgot-password.html">
+              Forgot Password?
+            </a>
+
+          </div>
+
+
+          <button
+            class="auth-btn"
+            type="submit"
+          >
+            Sign In
+          </button>
+
+        </form>
+
+
+        <div class="divider">
+          OR
+        </div>
+
+
+        <button
+          class="google-btn"
+          id="googleLogin"
+          type="button"
+        >
+          Continue with Google
+        </button>
+
+
+        <div class="signup-link">
+
+          Don't have a CampusVoice account?
+
+          <a href="student/signup.html">
+            Create an account
+          </a>
+
+        </div>
+
+      </div>
+
+    </section>
+
+  </div>
+
+
+  <footer class="auth-footer">
+
+    <div class="footer-brand">
+
+      <img
+        src="assets/cmu-logo.png"
+        alt="CMU"
+      >
+
+      <div>
+
+        <strong>
+          City of Malabon University
+        </strong>
+
+        <small>
+          CampusVoice · Concern Management System
+        </small>
+
+      </div>
+
+    </div>
+
+
+    <div class="footer-col">
+
+      <b>
+        GET IN TOUCH
+      </b>
+
+      <small>
+        Pampano cor. Maya-Maya Sts., Longos, City of Malabon
+      </small>
+
+      <small>
+
+        <a
+          href="mailto:cmuofficial@cityofmalabonuniversity.edu.ph"
+        >
+          cmuofficial@cityofmalabonuniversity.edu.ph
+        </a>
+
+      </small>
+
+    </div>
+
+
+    <div class="footer-col">
+
+      <b>
+        QUICK LINKS
+      </b>
+
+      <small>
+
+        <a
+          href="https://cityofmalabonuniversity.edu.ph/"
+          target="_blank"
+          rel="noopener"
+        >
+          Official CMU Website
+        </a>
+
+        ·
+
+        <a href="forgot-password.html">
+          Password Help
+        </a>
+
+      </small>
+
+    </div>
+
+
+    <div class="footer-bottom">
+
+      © 2026 CampusVoice · City of Malabon University · For university concern management and monitoring
+
+    </div>
+
+  </footer>
+
+
+  <script src="js/supabase-config.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script src="js/auth.js"></script>
+
+
+  <script>
+    const panel = document.getElementById("campusPanel");
+
+    const dots = document.querySelectorAll("[data-photo]");
+
+    let photo = "one";
+
+    function setPhoto(next) {
+
+      photo = next;
+
+      panel.classList.toggle(
+        "photo-two",
+        next === "two"
+      );
+
+      dots.forEach(dot => {
+
+        dot.classList.toggle(
+          "active",
+          dot.dataset.photo === next
+        );
+
+      });
+
+    }
+
+
+    dots.forEach(dot => {
+
+      dot.addEventListener(
+        "click",
+        () => {
+          setPhoto(dot.dataset.photo);
+        }
+      );
+
+    });
+
+
+    let timer = setInterval(
+      () => {
+
+        setPhoto(
+          photo === "one"
+            ? "two"
+            : "one"
+        );
+
+      },
+      6500
+    );
+
+
+    panel.addEventListener(
+      "mouseenter",
+      () => {
+        clearInterval(timer);
+      }
+    );
+
+
+    panel.addEventListener(
+      "mouseleave",
+      () => {
+
+        timer = setInterval(
+          () => {
+
+            setPhoto(
+              photo === "one"
+                ? "two"
+                : "one"
+            );
+
+          },
+          6500
+        );
+
+      }
+    );
+  </script>
+
+</body>
+</html>

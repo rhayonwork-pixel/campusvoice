@@ -1,0 +1,32 @@
+/* Login / signup / reset — split layout, no footer */
+body.authpage { background: var(--cream); }
+.auth { min-height: 100svh; display: grid; grid-template-columns: minmax(320px, 44%) 1fr; }
+.auth-side { position: relative; overflow: hidden; color: #fff; padding: 2.2rem clamp(1.5rem, 4vw, 3.5rem); display: flex; flex-direction: column; justify-content: space-between; background: var(--navy-deep); }
+.auth-side-bg { position: absolute; inset: 0; background: linear-gradient(160deg, rgba(10,28,64,.88), rgba(15,42,94,.7) 60%, rgba(10,28,64,.92)), url('../img/cmu-administration-building.png') center/cover; animation: drift 24s ease-in-out infinite alternate; }
+@keyframes drift { from { transform: scale(1.03); } to { transform: scale(1.14) translate(-2%, 1%); } }
+.auth-brand, .auth-quote { position: relative; z-index: 1; }
+.auth-brand { display: flex; align-items: center; gap: .8rem; }
+.auth-brand span { display: flex; flex-direction: column; line-height: 1.1; }
+.auth-brand b { font-family: var(--serif); font-size: 1.5rem; }
+.auth-brand small { font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; opacity: .75; }
+.auth-quote { max-width: 420px; color: var(--gold); }
+.auth-quote h2 { font-family: var(--serif); font-size: clamp(1.9rem, 3.2vw, 2.8rem); color: #fff; margin: .8rem 0; line-height: 1.12; }
+.auth-quote h2 em { color: var(--gold); }
+.auth-quote p { color: #c9d6ee; }
+.auth-main { display: grid; place-items: center; padding: 2rem 1.2rem; }
+.auth-card { width: min(440px, 100%); animation: rise .5s var(--ease); }
+.auth-card.wide { width: min(620px, 100%); }
+.auth-back { font-size: .85rem; color: var(--muted); display: inline-block; margin-bottom: 1.4rem; transition: color .2s, transform .2s; }
+.auth-back:hover { color: var(--navy); transform: translateX(-3px); }
+.auth-card h1 { font-family: var(--serif); font-size: 2.2rem; color: var(--navy); margin-bottom: .3rem; }
+.auth-sub { color: var(--muted); margin-bottom: 1.6rem; }
+.auth-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin: .2rem 0 1.2rem; font-size: .9rem; flex-wrap: wrap; }
+.auth-row a, .auth-alt a { color: var(--navy-2); font-weight: 600; }
+.auth-row a:hover, .auth-alt a:hover { text-decoration: underline; }
+.auth-alt { text-align: center; margin-top: 1.4rem; color: var(--muted); font-size: .92rem; }
+@media (max-width: 860px) {
+  .auth { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .auth-side { padding: 1.2rem 1.4rem; min-height: 0; }
+  .auth-quote { display: none; }
+  .auth-brand img { height: 44px !important; }
+}

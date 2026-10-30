@@ -1,0 +1,249 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>System Activity | CampusVoice</title>
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/admin.css">
+</head>
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/shell.js"></script>
+
+    <script>
+        const actions = [
+            "Concern Submitted",
+            "Staff Assigned",
+            "Status Updated",
+            "Priority Changed",
+            "User Created",
+            "Category Updated",
+            "Location Updated",
+            "Admin Note Added"
+        ];
+
+        const content = `
+            <div class="toolbar">
+                <input id="q" placeholder="Search user, action, reference...">
+
+                <select id="role">
+                    <option value="All Roles">All Roles</option>
+                    <option value="Student">Student</option>
+                    <option value="Staff">Staff</option>
+                    <option value="Administrator">Administrator</option>
+                    <option value="Super Admin">Super Admin</option>
+                </select>
+
+                <select id="act">
+                    <option value="All Actions">All Actions</option>
+                    ${actions.map(action =>
+                        `<option value="${esc(action)}">${esc(action)}</option>`
+                    ).join("")}
+                </select>
+
+                <input id="date" type="date">
+                <button class="btn" id="filter">Filter</button>
+            </div>
+
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <h3 class="card-title">System Activity</h3>
+                        <div class="card-subtitle">
+                            Audit trail for important system and administrative actions.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Date &amp; Time</th>
+                                <th>User</th>
+                                <th>Role</th>
+                                <th>Action</th>
+                                <th>Reference</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rows">
+                            <tr>
+                                <td colspan="6" class="empty">Loading activity logs...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="alert info" style="margin-top:15px">
+                Activity logs are read from the system database.
+                Authorized administrators should not edit or delete audit records.
+            </div>
+        `;
+
+        shell(
+            "activity.html",
+            "System Activity",
+            "Audit trail for important system and administrative actions.",
+            content,
+            ""
+        );
+            const sb = window.campusVoiceSupabase;
+
+        async function loadActivityLogs() {
+            const tbody = document.getElementById("rows");
+
+            try {
+                const { data, error } = await sb
+                    .from("activity_logs")
+                    .select(`
+                        activity_id,
+                        user_id,
+                        action,
+                        reference_type,
+                        reference_id,
+                        details,
+                        created_at
+                    `)
+                    .order("created_at", { ascending: false });
+
+                if (error) throw error;
+
+                const logs = data || [];
+
+                const userIds = [
+                    ...new Set(logs.map(log => log.user_id).filter(Boolean))
+                ];
+
+                let usersById = {};
+
+                if (userIds.length > 0) {
+                    const { data: users, error: usersError } =
+                        await sb
+                            .from("users")
+                            .select("user_id, first_name, middle_initial, last_name, role")
+                            .in("user_id", userIds);
+
+                    if (usersError) throw usersError;
+
+                    (users || []).forEach(user => {
+                        usersById[user.user_id] = user;
+                    });
+                }
+
+                function safe(value) {
+                    return String(value ?? "").replace(/[&<>"']/g, char => ({
+                        "&": "&amp;",
+                        "<": "&lt;",
+                        ">": "&gt;",
+                        '"': "&quot;",
+                        "'": "&#39;"
+                    })[char]);
+                }
+
+                const rows = logs.map(log => {
+                    const user = usersById[log.user_id];
+                    const name = user
+                        ? [
+                            user.first_name,
+                            user.middle_initial,
+                            user.last_name
+                        ].filter(Boolean).join(" ")
+                        : "Unknown User";
+
+                    const roleMap = {
+                        student: "Student",
+                        staff: "Staff",
+                        admin: "Administrator",
+                        super_admin: "Super Admin"
+                    };
+
+                    const role = roleMap[user?.role] || user?.role || "Unknown";
+                    const date = log.created_at
+                        ? new Date(log.created_at)
+                        : null;
+
+                    const time = date && !Number.isNaN(date.getTime())
+                        ? date.toLocaleString()
+                        : "Unknown date";
+
+                    const reference = [
+                        log.reference_type,
+                        log.reference_id
+                    ].filter(Boolean).join(" #") || "—";
+
+                    return {
+                        time,
+                        dateKey: date && !Number.isNaN(date.getTime())
+                            ? date.toLocaleDateString("en-CA")
+                            : "",
+                        user: name,
+                        role,
+                        action: log.action || "—",
+                        reference,
+                        details: log.details || "—"
+                    };
+                });
+
+                function render() {
+                    const q = document.getElementById("q").value
+                        .trim().toLowerCase();
+                    const role = document.getElementById("role").value;
+                    const action = document.getElementById("act").value;
+                    const date = document.getElementById("date").value;
+
+                    const filtered = rows.filter(row =>
+                        (!q || [
+                            row.user,
+                            row.action,
+                            row.reference,
+                            row.details
+                        ].join(" ").toLowerCase().includes(q)) &&
+                        (role === "All Roles" || row.role === role) &&
+                        (action === "All Actions" || row.action === action) &&
+                        (!date || row.dateKey === date)
+                    );
+
+                    tbody.innerHTML = filtered.map(row => `
+                        <tr>
+                            <td>${safe(row.time)}</td>
+                            <td>${safe(row.user)}</td>
+                            <td>${safe(row.role)}</td>
+                            <td>${safe(row.action)}</td>
+                            <td>${safe(row.reference)}</td>
+                            <td>${safe(row.details)}</td>
+                        </tr>
+                    `).join("") ||
+                    '<tr><td colspan="6" class="empty">No activity found.</td></tr>';
+                }
+
+                document.getElementById("filter").addEventListener("click", render);
+                document.getElementById("q").addEventListener("input", render);
+                document.getElementById("role").addEventListener("change", render);
+                document.getElementById("act").addEventListener("change", render);
+                document.getElementById("date").addEventListener("change", render);
+
+                render();
+
+            } catch (error) {
+                console.error("Unable to load activity logs:", error);
+
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="empty">
+                            Unable to load activity logs. Check the browser console.
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        loadActivityLogs();
+    </script>
+</body>
+</html>

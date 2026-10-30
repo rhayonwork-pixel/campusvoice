@@ -1,0 +1,791 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Concern Review | CampusVoice</title>
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/staff.css">
+</head>
+<body>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/shell.js"></script>
+
+<script>
+const supabaseClient = window.campusVoiceSupabase;
+const concernId = new URLSearchParams(location.search).get("id");
+
+let currentUser = null;
+let currentConcern = null;
+let evidenceFile = null;
+let saving = false;
+
+const templates = {
+    "Assigned": "Your concern has been reviewed and assigned to the appropriate university personnel for action.",
+    "In Progress": "Your concern is currently being addressed. We will provide an update once the necessary action has been completed.",
+    "Waiting for Resources": "Your concern has been reviewed. Work is waiting for the necessary materials or assistance.",
+    "Resolved": "Your concern has been addressed. Please review the action taken below."
+};
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function formatDate(value) {
+    if (!value) return "—";
+
+    const date = new Date(value);
+
+    return Number.isNaN(date.getTime())
+        ? "—"
+        : date.toLocaleString("en-PH", {
+            dateStyle: "medium",
+            timeStyle: "short"
+        });
+}
+
+function notify(message) {
+    if (typeof toast === "function") {
+        toast(message);
+    } else {
+        alert(message);
+    }
+}
+
+function showError(message) {
+    shell(
+        "concerns.html",
+        "Concern Review",
+        "Review and update an assigned concern.",
+        `
+            <div class="card">
+                <h3 class="card-title">Unable to Load Concern</h3>
+                <p>${escapeHtml(message)}</p>
+                <a class="btn" href="concerns.html">
+                    Back to My Assignments
+                </a>
+            </div>
+        `,
+        ""
+    );
+}
+
+async function loadConcern() {
+    try {
+        if (!supabaseClient) {
+            throw new Error("Supabase client is unavailable.");
+        }
+
+        if (!concernId || !/^\d+$/.test(concernId)) {
+            showError("Invalid concern ID. Open a concern from My Assignments.");
+            return;
+        }
+
+        const {
+            data: authData,
+            error: authError
+        } = await supabaseClient.auth.getUser();
+
+        if (authError) throw authError;
+
+        currentUser = authData.user;
+
+        if (!currentUser) {
+            location.href = "../index.html";
+            return;
+        }
+
+        const {
+            data: profile,
+            error: profileError
+        } = await supabaseClient
+            .from("users")
+            .select("user_id, role, account_status")
+            .eq("user_id", currentUser.id)
+            .single();
+
+        if (profileError) throw profileError;
+
+        if (
+            profile.role !== "staff" ||
+            profile.account_status !== "active"
+        ) {
+            throw new Error("An active staff account is required.");
+        }
+
+        const {
+            data: assignment,
+            error: assignmentError
+        } = await supabaseClient
+            .from("assignments")
+            .select("assignment_id, concern_id, staff_id, assignment_status")
+            .eq("concern_id", Number(concernId))
+            .eq("staff_id", currentUser.id)
+            .eq("assignment_status", "active")
+            .maybeSingle();
+
+        if (assignmentError) throw assignmentError;
+
+        if (!assignment) {
+            throw new Error(
+                "This concern is not actively assigned to your account."
+            );
+        }
+
+        const {
+            data: concern,
+            error: concernError
+        } = await supabaseClient
+            .from("concerns")
+            .select(`
+                concern_id,
+                concern_code,
+                student_id,
+                title,
+                description,
+                date_submitted,
+                created_at,
+                status_id,
+                priority_id,
+                category_id,
+                location_id
+            `)
+            .eq("concern_id", Number(concernId))
+            .single();
+
+        if (concernError) throw concernError;
+
+        currentConcern = concern;
+
+        const [
+            statusResult,
+            categoryResult,
+            locationResult,
+            priorityResult,
+            studentResult,
+            updateResult,
+            photoResult
+        ] = await Promise.all([
+            supabaseClient
+                .from("statuses")
+                .select("status_id, status_name")
+                .order("status_id"),
+
+            supabaseClient
+                .from("categories")
+                .select("category_id, category_name")
+                .eq("category_id", concern.category_id)
+                .maybeSingle(),
+
+            supabaseClient
+                .from("locations")
+                .select("location_id, building, floor, area")
+                .eq("location_id", concern.location_id)
+                .maybeSingle(),
+
+            concern.priority_id == null
+                ? Promise.resolve({ data: null, error: null })
+                : supabaseClient
+                    .from("priorities")
+                    .select("priority_id, priority_name")
+                    .eq("priority_id", concern.priority_id)
+                    .maybeSingle(),
+
+            supabaseClient
+                .from("users")
+                .select("user_id, student_id, first_name, role")
+                .eq("user_id", concern.student_id)
+                .maybeSingle(),
+
+            supabaseClient
+                .from("concern_updates")
+                .select("update_id, user_id, status_id, update_type, response, action_taken, created_at")
+                .eq("concern_id", concern.concern_id)
+                .order("created_at", { ascending: false })
+                .limit(1),
+
+            supabaseClient
+                .from("photos")
+                .select("file_path, photo_type")
+                .eq("concern_id", concern.concern_id)
+                .in("photo_type", ["supporting", "evidence", "before", "after"])
+                .order("photo_id", { ascending: false })
+        ]);
+
+        for (const result of [
+            statusResult,
+            categoryResult,
+            locationResult,
+            priorityResult,
+            studentResult,
+            updateResult,
+            photoResult
+        ]) {
+            if (result.error) throw result.error;
+        }
+
+        const statuses = statusResult.data || [];
+        const category = categoryResult.data?.category_name || "—";
+        const location = locationResult.data || {};
+        const priority = priorityResult.data?.priority_name || "To be assessed";
+        const student = studentResult.data || {};
+        const latestUpdate = updateResult.data?.[0] || null;
+        const photos = photoResult.data || [];
+
+        const statusName =
+            statuses.find(s => String(s.status_id) === String(concern.status_id))?.status_name
+            || "Submitted";
+
+        const initialResponse = "";
+        const initialAction = "";
+
+        let photoMarkup = `
+            <div class="photo-box">
+                No photos have been attached.
+            </div>
+        `;
+
+        if (photos.length) {
+            const photoUrls = await Promise.all(
+                photos.map(async photo => {
+                    const { data, error } = await supabaseClient.storage
+                        .from("concern-photos")
+                        .createSignedUrl(photo.file_path, 3600);
+
+                    if (error) {
+                        console.error("Photo URL error:", error);
+                        return null;
+                    }
+
+                    return {
+                        type: photo.photo_type,
+                        url: data?.signedUrl
+                    };
+                })
+            );
+
+            const validPhotos = photoUrls.filter(p => p?.url);
+
+            if (validPhotos.length) {
+                photoMarkup = validPhotos.map(photo => `
+                    <div style="margin-bottom:14px">
+                        <div class="card-subtitle">
+                            ${escapeHtml(photo.type)}
+                        </div>
+                        <a href="${escapeHtml(photo.url)}"
+                           target="_blank"
+                           rel="noopener noreferrer">
+                            <img
+                                class="photo-preview"
+                                src="${escapeHtml(photo.url)}"
+                                alt="${escapeHtml(photo.type)} photo"
+                                style="display:block;max-width:100%;height:auto"
+                            >
+                        </a>
+                    </div>
+                `).join("");
+            }
+        }
+
+        const editableStatuses = [
+            "Assigned",
+            "In Progress",
+            "Waiting for Resources",
+            "Resolved"
+        ];
+
+        const content = `
+            <div class="actions" style="margin-bottom:14px">
+                <a class="btn" href="concerns.html">
+                    ← Back to My Assignments
+                </a>
+            </div>
+
+            <div class="detail-grid">
+                <div>
+                    <div class="card">
+                        <div class="card-head">
+                            <div>
+                                <span class="eyebrow" style="color:#2c5ca8">
+                                    ASSIGNED CONCERN
+                                </span>
+                                <h3 class="card-title" style="font-size:19px;margin-top:4px">
+                                    ${escapeHtml(concern.title)}
+                                </h3>
+                                <div class="card-subtitle">
+                                    ${escapeHtml(concern.concern_code || concern.concern_id)}
+                                    · Submitted ${formatDate(concern.date_submitted || concern.created_at)}
+                                </div>
+                            </div>
+                            <div>
+                                ${typeof badge === "function"
+                                    ? badge(statusName)
+                                    : escapeHtml(statusName)}
+                            </div>
+                        </div>
+
+                        <div class="info-grid">
+                            <div class="info-box">
+                                <small>STUDENT</small>
+                                <b>${escapeHtml(student.first_name || "Student")}</b>
+                            </div>
+                            <div class="info-box">
+                                <small>STUDENT ID</small>
+                                <b>${escapeHtml(student.student_id || "—")}</b>
+                            </div>
+                            <div class="info-box">
+                                <small>CATEGORY</small>
+                                <b>${escapeHtml(category)}</b>
+                            </div>
+                            <div class="info-box">
+                                <small>LOCATION</small>
+                                <b>${escapeHtml(location.building || "—")} · ${escapeHtml(location.floor || "—")}</b>
+                            </div>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3>Description</h3>
+                            <p style="white-space:pre-wrap">${escapeHtml(concern.description || "No description provided.")}</p>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3>Quick Update</h3>
+                            <div class="template">
+                                <label for="quick">Update Type</label>
+                                <select id="quick">
+                                    <option value="inspection">Currently Inspecting</option>
+                                    <option value="repair">Repair in Progress</option>
+                                    <option value="materials">Waiting for Materials</option>
+                                    <option value="external">Waiting for External Assistance</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="further_action">Needs Further Action</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3>Response to Student</h3>
+                            <div class="field">
+                                <label for="newStatus">Status</label>
+                                <select id="newStatus">
+                                    ${editableStatuses.map(name => {
+                                        const row = statuses.find(s => s.status_name === name);
+                                        return row ? `
+                                            <option value="${row.status_id}"
+                                                ${String(row.status_id) === String(concern.status_id) ? "selected" : ""}>
+                                                ${escapeHtml(row.status_name)}
+                                            </option>
+                                        ` : "";
+                                    }).join("")}
+                                </select>
+                            </div>
+
+                            <div class="field" style="margin-top:10px">
+                                <label for="response">Response</label>           
+<textarea id="response" placeholder="Describe the actual progress or update for the student.">${escapeHtml(
+    initialResponse || templates[statusName] || ""
+)}</textarea>
+                                <div class="hint">
+                                    Write a clear, accurate update for the student.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3>Action Taken</h3>
+                            <div class="field">
+                                <textarea id="action" placeholder="Describe the actual work performed. Required when marking Resolved.">${escapeHtml(initialAction)}</textarea>
+                            </div>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3>Evidence / Progress Photo</h3>
+                            <div class="field">
+                                <label for="evidence">Upload Photo</label>
+                                <input id="evidence" type="file"
+                                    accept="image/jpeg,image/png,image/webp">
+                                <div id="evidencePreview" class="file-preview"></div>
+                                <div id="photoRequirementHint" class="hint">
+                                    A photo is required for inspection, repair progress, and completion/resolution. Optional while waiting for materials or external assistance.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button class="btn" id="saveButton" type="button">
+                                Save Update
+                            </button>
+                            <button class="btn primary" id="resolveButton" type="button">
+                                Submit for Verification
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="card">
+                        <h3 class="card-title">Concern Information</h3>
+                        <div class="info-grid" style="margin-top:14px">
+                            <div class="info-box">
+                                <small>PRIORITY</small>
+                                <b>${escapeHtml(priority)}</b>
+                            </div>
+                            <div class="info-box">
+                                <small>ASSIGNMENT</small>
+                                <b>Active</b>
+                            </div>
+                            <div class="info-box">
+                                <small>AREA</small>
+                                <b>${escapeHtml(location.area || "—")}</b>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top:18px">
+                        <h3 class="card-title">Concern Photos</h3>
+                        ${photoMarkup}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        shell(
+            "concerns.html",
+            "Concern Review",
+            "Review, update, respond, and resolve an assigned concern.",
+            content,
+            ""
+        );
+
+        const evidenceInput = document.getElementById("evidence");
+        const quickSelect = document.getElementById("quick");
+        const newStatusSelect = document.getElementById("newStatus");
+        const photoHint = document.getElementById("photoRequirementHint");
+
+        function requiresPhoto() {
+            const quickType = quickSelect.value;
+            const selectedStatusName =
+                newStatusSelect.selectedOptions[0]?.textContent.trim();
+
+            return (
+                ["inspection", "repair", "completed"].includes(quickType) ||
+                selectedStatusName === "Resolved"
+            );
+        }
+
+        function updatePhotoRequirement() {
+            const required = requiresPhoto();
+
+            evidenceInput.setAttribute("aria-required", String(required));
+
+            photoHint.textContent = required
+                ? "Photo required for this update. Upload an inspection, repair progress, or completion photo before saving."
+                : "Photo optional while waiting for materials or external assistance. Upload one if available.";
+        }
+
+        evidenceInput.addEventListener("change", event => {
+            evidenceFile = event.target.files?.[0] || null;
+
+            const preview = document.getElementById("evidencePreview");
+            preview.innerHTML = "";
+
+            if (!evidenceFile) {
+                updatePhotoRequirement();
+                return;
+            }
+
+            if (!["image/jpeg", "image/png", "image/webp"].includes(evidenceFile.type)) {
+                evidenceFile = null;
+                event.target.value = "";
+                notify("Please choose a JPG, PNG, or WebP image.");
+                updatePhotoRequirement();
+                return;
+            }
+
+            if (evidenceFile.size > 5 * 1024 * 1024) {
+                evidenceFile = null;
+                event.target.value = "";
+                notify("The image must be 5 MB or smaller.");
+                updatePhotoRequirement();
+                return;
+            }
+
+            const image = document.createElement("img");
+            image.className = "photo-preview";
+            image.alt = "Evidence preview";
+            image.style.maxWidth = "100%";
+            image.style.height = "auto";
+            image.src = URL.createObjectURL(evidenceFile);
+            preview.appendChild(image);
+
+            updatePhotoRequirement();
+        });
+
+        quickSelect.addEventListener("change", updatePhotoRequirement);
+
+       newStatusSelect.addEventListener("change", event => {
+    const name = statuses.find(
+        s => String(s.status_id) === event.target.value
+    )?.status_name;
+
+    const response = document.getElementById("response");
+    response.value = templates[name] || "";
+
+    updatePhotoRequirement();
+});
+
+        document.getElementById("saveButton").addEventListener(
+            "click",
+            () => saveUpdate(false)
+        );
+
+        document.getElementById("resolveButton").addEventListener(
+            "click",
+            () => saveUpdate(true)
+        );
+
+        updatePhotoRequirement();
+
+    } catch (error) {
+        console.error("Staff Concern Review loading error:", error);
+        showError(error.message || "An unexpected error occurred.");
+    }
+}
+
+async function saveUpdate(resolve) {
+    if (saving) return;
+
+    const statusSelect = document.getElementById("newStatus");
+    const responseText = document.getElementById("response").value.trim();
+    const actionText = document.getElementById("action").value.trim();
+    const quickType = document.getElementById("quick").value;
+
+    const selectedStatusId = Number(statusSelect.value);
+    const selectedStatusName =
+        statusSelect.selectedOptions[0]?.textContent.trim();
+
+    if (!resolve && selectedStatusName === "Resolved") {
+    notify("Only the administrator can verify and resolve this concern.");
+    return;
+}
+
+const finalStatusId = 4;
+const finalStatusName = "In Progress";
+
+    if (resolve && !actionText) {
+        notify("Action Taken is required before marking a concern as resolved.");
+        document.getElementById("action").focus();
+        return;
+    }
+
+    if (!responseText) {
+        notify("Please enter a response for the student.");
+        document.getElementById("response").focus();
+        return;
+    }
+    const photoRequired =
+        ["inspection", "repair", "completed"].includes(quickType) ||
+        finalStatusName === "Resolved";
+
+    if (photoRequired && !evidenceFile) {
+        const message = quickType === "inspection"
+            ? "Please upload an inspection photo before saving this update."
+            : quickType === "repair"
+                ? "Please upload a repair progress photo before saving this update."
+                : "Please upload a completion photo before saving or resolving this concern.";
+
+        notify(message);
+        document.getElementById("evidence").focus();
+        return;
+    }
+
+    if (!currentUser) {
+        notify("Your session has expired. Please log in again.");
+        return;
+    }
+
+    saving = true;
+
+    const saveButton = document.getElementById("saveButton");
+    const resolveButton = document.getElementById("resolveButton");
+
+    saveButton.disabled = true;
+    resolveButton.disabled = true;
+
+    let uploadedPath = null;
+
+    try {
+        // Recheck assignment before saving.
+        
+const {
+    data: assignment,
+    error: assignmentError
+} = await supabaseClient
+    .from("assignments")
+    .select("assignment_id, concern_id, staff_id, assignment_status")
+    .eq("concern_id", currentConcern.concern_id)
+    .eq("staff_id", currentUser.id)
+    .eq("assignment_status", "active")
+    .maybeSingle();
+
+console.log("Current concern:", currentConcern.concern_id);
+console.log("Current user:", currentUser.id);
+console.log("Assignment result:", assignment);
+console.log("Assignment error:", assignmentError);
+
+if (assignmentError) throw assignmentError;
+
+if (!assignment) {
+    throw new Error(
+        "No active assignment was returned. Check the browser Console."
+    );
+}
+
+         const {
+            data: previousUpdates,
+            error: previousUpdatesError
+        } = await supabaseClient
+            .from("concern_updates")
+            .select("status_id, update_type, response, action_taken")
+            .eq("concern_id", currentConcern.concern_id)
+            .eq("user_id", currentUser.id)
+            .order("created_at", { ascending: false })
+            .limit(1);
+
+        if (previousUpdatesError) throw previousUpdatesError;
+
+        const previous = previousUpdates?.[0];
+
+        if (
+            previous &&
+            String(previous.status_id) === String(finalStatusId) &&
+            String(previous.update_type || "") === String(quickType || "") &&
+            String(previous.response || "").trim() === responseText &&
+            String(previous.action_taken || "").trim() === actionText
+        ) {
+            notify(
+                "This update is identical to your last saved update. Please enter new progress before saving again."
+            );
+            return;
+        }
+
+        if (evidenceFile) {
+            const extension = evidenceFile.name.split(".").pop().toLowerCase();
+            const safeExtension = ["jpg", "jpeg", "png", "webp"].includes(extension)
+                ? extension
+                : "jpg";
+
+            uploadedPath =
+                `${currentUser.id}/${currentConcern.concern_id}-evidence-${crypto.randomUUID()}.${safeExtension}`;
+
+            const { error: uploadError } = await supabaseClient.storage
+                .from("concern-photos")
+                .upload(uploadedPath, evidenceFile, {
+                    contentType: evidenceFile.type,
+                    upsert: false
+                });
+
+            if (uploadError) throw uploadError;
+        }
+
+        // Save the staff response and action history.
+        const { error: updateInsertError } = await supabaseClient
+            .from("concern_updates")
+            .insert({
+                concern_id: currentConcern.concern_id,
+                user_id: currentUser.id,
+                status_id: finalStatusId,
+                update_type: quickType,
+                response: responseText,
+                action_taken: actionText || null
+            });
+
+        if (updateInsertError) throw updateInsertError;
+
+        // Update the current concern status.
+        const statusUpdate = {
+            status_id: finalStatusId,
+            updated_at: new Date().toISOString()
+        };
+
+        if (finalStatusName === "Resolved") {
+            statusUpdate.resolved_at = new Date().toISOString();
+        }
+
+        const { data: updatedConcern, error: concernUpdateError } =
+    await supabaseClient
+        .from("concerns")
+        .update(statusUpdate)
+        .eq("concern_id", currentConcern.concern_id)
+        .select("concern_id, status_id, resolved_at")
+        .maybeSingle();
+
+if (concernUpdateError) throw concernUpdateError;
+
+if (
+    !updatedConcern ||
+    String(updatedConcern.status_id) !== String(finalStatusId)
+) {
+    throw new Error(
+        "The progress history was saved, but the concern status was not updated. Check your Supabase permissions or policies."
+    );
+}
+
+        // Save the photo metadata after upload.
+        if (uploadedPath) {
+            const { error: photoInsertError } = await supabaseClient
+                .from("photos")
+                .insert({
+                    concern_id: currentConcern.concern_id,
+                    uploaded_by: currentUser.id,
+                    photo_type: "evidence",
+                    file_path: uploadedPath
+                });
+
+            if (photoInsertError) {
+                throw new Error(
+                    "The update was saved, but evidence metadata could not be saved: " +
+                    photoInsertError.message
+                );
+            }
+        }
+
+        notify(
+            finalStatusName === "Resolved"
+                ? "Concern marked as resolved."
+                : "Concern update saved."
+        );
+
+        location.reload();
+
+    } catch (error) {
+        console.error("Saving staff update failed:", {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint
+        });
+
+        notify(error.message || "Unable to save the update. Check the Console.");
+
+    } finally {
+        saving = false;
+        saveButton.disabled = false;
+        resolveButton.disabled = false;
+    }
+}
+
+document.addEventListener("DOMContentLoaded", loadConcern);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,820 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Reports | CampusVoice</title>
+
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/admin.css">
+</head>
+
+<body>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../js/supabase-config.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/shell.js"></script>
+
+    <script>
+    (async function () {
+        "use strict";
+
+        const sb = window.campusVoiceSupabase;
+
+        const savedUser = JSON.parse(
+            localStorage.getItem("campusvoiceUser") ||
+            sessionStorage.getItem("campusvoiceUser") ||
+            "null"
+        );
+
+        const content = `
+            
+<div class="report-filters">
+    <div class="report-filter-field">
+        <label for="from">Start Date</label>
+        <input id="from" type="date" title="Start Date">
+    </div>
+
+    <div class="report-filter-field">
+        <label for="to">End Date</label>
+        <input id="to" type="date" title="End Date">
+    </div>
+
+    <div class="report-filter-field">
+        <label for="cat">Category</label>
+        <select id="cat">
+            <option value="All">All Categories</option>
+        </select>
+    </div>
+
+    <div class="report-filter-field">
+        <label for="status">Status</label>
+        <select id="status">
+            <option value="All">All Statuses</option>
+        </select>
+    </div>
+
+    <div class="report-filter-field">
+        <label for="priority">Priority</label>
+        <select id="priority">
+            <option value="All">All Priorities</option>
+        </select>
+    </div>
+
+    <div class="report-filter-field">
+        <label for="loc">Location / Building</label>
+        <select id="loc">
+            <option value="All">All Locations</option>
+        </select>
+    </div>
+
+    <div class="report-filter-field">
+        <label for="staff">Assigned Staff</label>
+        <select id="staff">
+            <option value="All">All Staff</option>
+        </select>
+    </div>
+
+    <div class="report-filter-actions">
+        <button class="btn primary" id="generate" type="button">
+            Generate Report
+        </button>
+
+        <button class="btn" id="print" type="button">
+            Print
+        </button>
+
+        <button class="btn" id="export" type="button">
+            Export CSV
+        </button>
+    </div>
+</div>
+
+
+            <div
+                class="alert info"
+                id="generatedInfo"
+                role="status"
+                aria-live="polite"
+            >
+                Loading actual concern records...
+            </div>
+
+            <div class="grid g3">
+                <div class="card clickable-card"
+                     id="totalCard"
+                     role="button"
+                     tabindex="0">
+                    <div class="metric-label">TOTAL SUBMITTED</div>
+                    <div id="total" class="metric-value">—</div>
+                    <div class="metric-note">View concern records</div>
+                </div>
+
+                <div class="card clickable-card"
+                     id="openCard"
+                     role="button"
+                     tabindex="0">
+                    <div class="metric-label">OPEN</div>
+                    <div id="open" class="metric-value">—</div>
+                    <div class="metric-note">Active concerns</div>
+                </div>
+
+                <div class="card clickable-card"
+                     id="resolvedCard"
+                     role="button"
+                     tabindex="0">
+                    <div class="metric-label">RESOLVED</div>
+                    <div id="resolved" class="metric-value">—</div>
+                    <div class="metric-note">Resolved concerns</div>
+                </div>
+            </div>
+
+            <div class="grid g2" style="margin-top:18px;">
+                <div class="card">
+                    <div class="card-head">
+                        <div>
+                            <h3 class="card-title">Category Report</h3>
+                            <div class="card-subtitle">
+                                Concern volume by category.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="catReport" class="report-grid">
+                        <div class="empty">Loading data...</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-head">
+                        <div>
+                            <h3 class="card-title">Location Report</h3>
+                            <div class="card-subtitle">
+                                Concern volume by building.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="locReport" class="report-grid">
+                        <div class="empty">Loading data...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid g2" style="margin-top:18px;">
+                <div class="card">
+                    <div class="card-head">
+                        <div>
+                            <h3 class="card-title">Staff Performance</h3>
+                            <div class="card-subtitle">
+                                Assigned workload and resolved concerns.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="staffReport" class="report-grid">
+                        <div class="empty">Loading data...</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-head">
+                        <div>
+                            <h3 class="card-title">Resolution Performance</h3>
+                            <div class="card-subtitle">
+                                Current operational indicators.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="list">
+                        <div class="list-row">
+                            <div>
+                                <b>Average Resolution Time</b>
+                                <small>
+                                    Requires reliable resolution timestamps.
+                                </small>
+                            </div>
+                            <strong id="avgResolution">—</strong>
+                        </div>
+
+                        <div class="list-row">
+                            <div>
+                                <b>First Response Time</b>
+                                <small>
+                                    Requires actual first-response timestamps.
+                                </small>
+                            </div>
+                            <strong>—</strong>
+                        </div>
+
+                        <div class="list-row">
+                            <div>
+                                <b>Waiting for Resources</b>
+                                <small>
+                                    Concerns currently in this status.
+                                </small>
+                            </div>
+                            <strong id="resourceCount">—</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        shell(
+            "reports.html",
+            "Reports",
+            "Management reports, analytics, and operational performance.",
+            content,
+            ""
+        );
+
+        const $ = id => document.getElementById(id);
+
+        function safe(value) {
+            return String(value ?? "").replace(
+                /[&<>"']/g,
+                char => ({
+                    "&": "&amp;",
+                    "<": "&lt;",
+                    ">": "&gt;",
+                    '"': "&quot;",
+                    "'": "&#039;"
+                })[char]
+            );
+        }
+
+        function showMessage(message) {
+            $("generatedInfo").textContent = message;
+        }
+
+        function showError(message) {
+            showMessage(message);
+
+            [
+                "total",
+                "open",
+                "resolved",
+                "resourceCount"
+            ].forEach(id => {
+                $(id).textContent = "—";
+            });
+
+            [
+                "catReport",
+                "locReport",
+                "staffReport"
+            ].forEach(id => {
+                $(id).innerHTML =
+                    '<div class="empty">Report data unavailable.</div>';
+            });
+        }
+
+        if (!sb) {
+            showError(
+                "Supabase is unavailable. Check the existing configuration."
+            );
+            return;
+        }
+
+        if (
+            !savedUser?.userId &&
+            !savedUser?.user_id
+        ) {
+            showError(
+                "Unable to identify the current account. Please sign in again."
+            );
+            return;
+        }
+
+        let concerns = [];
+        let assignments = [];
+        let categories = [];
+        let locations = [];
+        let statuses = [];
+        let priorities = [];
+        let users = [];
+
+        let reportRows = [];
+
+        function getName(user) {
+            return [
+                user.first_name,
+                user.middle_initial,
+                user.last_name
+            ].filter(Boolean).join(" ") || user.email || "Unnamed user";
+        }
+
+        function findById(rows, key, value) {
+            return rows.find(
+                row => String(row[key]) === String(value)
+            );
+        }
+
+        function getCategory(concern) {
+            return findById(
+                categories,
+                "category_id",
+                concern.category_id
+            )?.category_name || "Uncategorized";
+        }
+
+        function getLocation(concern) {
+            const location = findById(
+                locations,
+                "location_id",
+                concern.location_id
+            );
+
+            if (!location) return "Not specified";
+
+            return [
+                location.building,
+                location.floor,
+                location.area
+            ].filter(Boolean).join(" · ") || "Not specified";
+        }
+
+        function getBuilding(concern) {
+            const location = findById(
+                locations,
+                "location_id",
+                concern.location_id
+            );
+
+            return location?.building || "Not specified";
+        }
+
+        function getStatus(concern) {
+            return findById(
+                statuses,
+                "status_id",
+                concern.status_id
+            )?.status_name || "Unknown";
+        }
+
+        function getPriority(concern) {
+            return findById(
+                priorities,
+                "priority_id",
+                concern.priority_id
+            )?.priority_name || "Not specified";
+        }
+
+        function getStudent(concern) {
+            return findById(
+                users,
+                "user_id",
+                concern.student_id
+            );
+        }
+
+        function getAssignedStaff(concern) {
+            const assignment = assignments.find(
+                item =>
+                    String(item.concern_id) ===
+                    String(concern.concern_id) &&
+                    item.staff_id
+            );
+
+            if (!assignment) return "Unassigned";
+
+            const staff = findById(
+                users,
+                "user_id",
+                assignment.staff_id
+            );
+
+            return staff ? getName(staff) : "Assigned staff";
+        }
+
+        function getDate(concern) {
+            const value =
+                concern.date_submitted ||
+                concern.created_at ||
+                "";
+
+            return value ? String(value).slice(0, 10) : "";
+        }
+
+        function normalize(concern) {
+            const student = getStudent(concern);
+
+            return {
+                id: concern.concern_code ||
+                    String(concern.concern_id),
+
+                concern_id: concern.concern_id,
+
+                student: student
+                    ? getName(student)
+                    : "Student",
+
+                category: getCategory(concern),
+                building: getBuilding(concern),
+                area: getLocation(concern),
+                priority: getPriority(concern),
+                status: getStatus(concern),
+                assigned: getAssignedStaff(concern),
+                date: getDate(concern)
+            };
+        }
+
+        async function loadData() {
+            showMessage("Loading actual Supabase data...");
+
+            const results = await Promise.all([
+                sb.from("concerns").select(
+                    "concern_id,concern_code,student_id,category_id,location_id,priority_id,status_id,date_submitted,created_at"
+                ),
+
+                sb.from("assignments").select(
+                    "assignment_id,concern_id,staff_id,assignment_status,assigned_at,completed_at"
+                ),
+
+                sb.from("categories").select(
+                    "category_id,category_name"
+                ),
+
+                sb.from("locations").select(
+                    "location_id,building,floor,area"
+                ),
+
+                sb.from("statuses").select(
+                    "status_id,status_name"
+                ),
+
+                sb.from("priorities").select(
+                    "priority_id,priority_name"
+                ),
+
+                sb.from("users").select(
+                    "user_id,first_name,middle_initial,last_name,email,role"
+                )
+            ]);
+
+            const errorResult = results.find(
+                result => result.error
+            );
+
+            if (errorResult) {
+                console.error(
+                    "Reports query error:",
+                    errorResult.error
+                );
+
+                throw new Error(
+                    errorResult.error.message ||
+                    "Unable to retrieve report data."
+                );
+            }
+
+            [
+                { data: concerns },
+                { data: assignments },
+                { data: categories },
+                { data: locations },
+                { data: statuses },
+                { data: priorities },
+                { data: users }
+            ] = results.map(result => ({
+                data: result.data || []
+            }));
+
+            fillFilters();
+
+            generateReport();
+        }
+
+        function fillSelect(id, values) {
+            const select = $(id);
+
+            const selected = select.value || "All";
+
+            select.innerHTML =
+                '<option value="All">All</option>';
+
+            [...new Set(values.filter(Boolean))]
+                .sort((a, b) => String(a).localeCompare(String(b)))
+                .forEach(value => {
+                    const option = document.createElement("option");
+
+                    option.value = value;
+                    option.textContent = value;
+
+                    select.appendChild(option);
+                });
+
+            if (
+                [...select.options].some(
+                    option => option.value === selected
+                )
+            ) {
+                select.value = selected;
+            }
+        }
+
+        
+function fillFilters() {
+    fillSelect(
+        "cat",
+        categories.map(item => item.category_name)
+    );
+
+    fillSelect(
+        "loc",
+        locations.map(item => item.building)
+    );
+
+    fillSelect(
+        "status",
+        statuses.map(item => item.status_name)
+    );
+
+    fillSelect(
+        "priority",
+        priorities.map(item => item.priority_name)
+    );
+
+    fillSelect(
+    "staff",
+    users
+        .filter(item =>
+            item.role === "staff" &&
+            item.account_status === "active"
+        )
+        .map(getName)
+    );
+}
+
+
+        
+function getFiltered() {
+    const from = $("from").value;
+    const to = $("to").value;
+    const cat = $("cat").value;
+    const loc = $("loc").value;
+    const status = $("status").value;
+    const priority = $("priority").value;
+    const staff = $("staff").value;
+
+    return concerns
+        .map(normalize)
+        .filter(item =>
+            (!from || (item.date && item.date >= from)) &&
+            (!to || (item.date && item.date <= to)) &&
+            (cat === "All" || item.category === cat) &&
+            (loc === "All" || item.building === loc) &&
+            (status === "All" || item.status === status) &&
+            (priority === "All" || item.priority === priority) &&
+            (staff === "All" || item.assigned === staff)
+        );
+}
+
+
+        function renderBreakdown(elementId, values) {
+            const total = reportRows.length;
+
+            const counts = new Map();
+
+            values.forEach(value => {
+                if (!value || value === "Not specified") return;
+
+                counts.set(
+                    value,
+                    (counts.get(value) || 0) + 1
+                );
+            });
+
+            const rows = [...counts.entries()]
+                .sort((a, b) => b[1] - a[1]);
+
+            if (!rows.length) {
+                $(elementId).innerHTML =
+                    '<div class="empty">No records for these filters.</div>';
+                return;
+            }
+
+            $(elementId).innerHTML = rows.map(
+                ([name, count]) => `
+                    <div class="report-item">
+                        <div>
+                            <b>${safe(name)}</b>
+                            <span>${count}</span>
+                        </div>
+
+                        <div class="progress">
+                            <i style="width:${
+                                total
+                                    ? Math.max(3, count / total * 100)
+                                    : 0
+                            }%"></i>
+                        </div>
+                    </div>
+                `
+            ).join("");
+        }
+
+        function generateReport() {
+            const from = $("from").value;
+            const to = $("to").value;
+
+            if (from && to && from > to) {
+                showMessage(
+                    "The start date must be on or before the end date."
+                );
+                return;
+            }
+
+            reportRows = getFiltered();
+
+            const total = reportRows.length;
+
+            const open = reportRows.filter(
+                item => ![
+                    "Resolved",
+                    "Closed",
+                    "Cancelled"
+                ].includes(item.status)
+            ).length;
+
+            const resolved = reportRows.filter(
+                item => item.status === "Resolved"
+            ).length;
+
+            $("total").textContent = total;
+            $("open").textContent = open;
+            $("resolved").textContent = resolved;
+
+            renderBreakdown(
+                "catReport",
+                reportRows.map(item => item.category)
+            );
+
+            renderBreakdown(
+                "locReport",
+                reportRows.map(item => item.building)
+            );
+
+            const staffNames = [
+                ...new Set(
+                    reportRows
+                        .filter(item => item.assigned !== "Unassigned")
+                        .map(item => item.assigned)
+                )
+            ];
+
+            $("staffReport").innerHTML = staffNames.length
+                ? staffNames.map(name => {
+                    const staffRows = reportRows.filter(
+                        item => item.assigned === name
+                    );
+
+                    const staffResolved = staffRows.filter(
+                        item => item.status === "Resolved"
+                    ).length;
+
+                    const percentage = staffRows.length
+                        ? staffResolved / staffRows.length * 100
+                        : 0;
+
+                    return `
+                        <div class="report-item">
+                            <div>
+                                <b>${safe(name)}</b>
+                                <span>
+                                    ${staffResolved}/${staffRows.length} resolved
+                                </span>
+                            </div>
+
+                            <div class="progress">
+                                <i style="width:${percentage}%"></i>
+                            </div>
+                        </div>
+                    `;
+                }).join("")
+                : '<div class="empty">No assigned staff records.</div>';
+
+            $("resourceCount").textContent =
+                reportRows.filter(
+                    item => item.status === "Waiting for Resources"
+                ).length;
+
+            showMessage(
+                `Showing ${total} concern${total === 1 ? "" : "s"} based on the selected filters.`
+            );
+        }
+
+        $("generate").addEventListener(
+            "click",
+            generateReport
+        );
+
+        $("print").addEventListener(
+            "click",
+            () => window.print()
+        );
+
+        $("export").addEventListener(
+            "click",
+            () => {
+                const rows = [
+                    [
+                        "Concern ID",
+                        "Student",
+                        "Category",
+                        "Building",
+                        "Area",
+                        "Priority",
+                        "Status",
+                        "Assigned Staff",
+                        "Date"
+                    ],
+
+                    ...reportRows.map(item => [
+                        item.id,
+                        item.student,
+                        item.category,
+                        item.building,
+                        item.area,
+                        item.priority,
+                        item.status,
+                        item.assigned,
+                        item.date
+                    ])
+                ];
+
+                const csv = rows.map(row =>
+                    row.map(value =>
+                        '"' +
+                        String(value ?? "").replace(/"/g, '""') +
+                        '"'
+                    ).join(",")
+                ).join("\r\n");
+
+                const blob = new Blob(
+                    ["\uFEFF", csv],
+                    { type: "text/csv;charset=utf-8;" }
+                );
+
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+
+                link.href = url;
+                link.download = "CampusVoice_Report.csv";
+
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+
+                URL.revokeObjectURL(url);
+            }
+        );
+
+        $("totalCard").addEventListener(
+            "click",
+            () => window.location.href = "concerns.html"
+        );
+
+        $("openCard").addEventListener(
+            "click",
+            () => window.location.href = "concerns.html?filter=open"
+        );
+
+        $("resolvedCard").addEventListener(
+            "click",
+            () => window.location.href = "concerns.html?filter=resolved"
+        );
+
+        [
+            ["totalCard", "concerns.html"],
+            ["openCard", "concerns.html?filter=open"],
+            ["resolvedCard", "concerns.html?filter=resolved"]
+        ].forEach(([id, url]) => {
+            $(id).addEventListener("keydown", event => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    window.location.href = url;
+                }
+            });
+        });
+
+        try {
+            await loadData();
+        } catch (error) {
+            console.error("Reports loading error:", error);
+
+            showError(
+                "Could not load reports from Supabase. Check the browser Console for details."
+            );
+        }
+
+    })();
+    </script>
+
+</body>
+</html>

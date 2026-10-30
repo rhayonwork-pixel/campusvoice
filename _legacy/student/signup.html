@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Student Registration | CampusVoice</title>
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/login.css">
+</head>
+
+<body>
+  <div class="auth">
+    <section class="auth-left">
+      <div class="auth-left-inner">
+        <img src="../assets/cmu-logo.png" alt="City of Malabon University">
+        <h1>Join CampusVoice</h1>
+        <div class="tag">STUDENT REGISTRATION</div>
+        <p>Create your CampusVoice account using your official City of Malabon University information. Staff and administrator accounts are created by authorized administrators.</p>
+      </div>
+    </section>
+
+    <section class="auth-right">
+      <div class="auth-card">
+        <h2>Create an account</h2>
+        <p>Student accounts only. Use your valid Student ID and university email.</p>
+
+        <div id="msg" class="auth-msg"></div>
+
+        <form id="signupForm">
+          <label>
+            Student ID
+            <input id="sid" required placeholder="Enter your Student ID" autocomplete="off">
+          </label>
+
+          <div class="form-grid" style="margin-top:12px">
+            <label>
+              First Name
+              <input id="first" required placeholder="First name" autocomplete="given-name">
+            </label>
+
+            <label>
+              Middle Initial
+              <input id="middle" maxlength="4" placeholder="M.I." autocomplete="additional-name">
+            </label>
+
+            <label>
+              Last Name
+              <input id="last" required placeholder="Last name" autocomplete="family-name">
+            </label>
+
+            <label>
+              College / Department
+              <select id="department" required>
+                <option value="">Loading colleges...</option>
+              </select>
+            </label>
+          </div>
+
+          <label style="margin-top:12px">
+            University Email
+            <input id="email" type="email" required placeholder="name@cityofmalabonuniversity.edu.ph" autocomplete="email">
+          </label>
+
+          <label>
+            Password
+            <input id="pw" type="password" required minlength="8" placeholder="At least 8 characters" autocomplete="new-password">
+          </label>
+
+          <label>
+            Confirm Password
+            <input id="cpw" type="password" required minlength="8" placeholder="Repeat password" autocomplete="new-password">
+          </label>
+
+          <label class="check">
+            <input id="terms" type="checkbox" required>
+            I agree to the CampusVoice Terms and Privacy Notice.
+          </label>
+
+          <button class="auth-btn" type="submit" id="signupBtn">
+            Create Student Account
+          </button>
+        </form>
+
+        <div class="signup-link">
+          Already have an account?
+          <a href="../index.html">Sign in</a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="auth-footer">
+    <div class="footer-brand">
+      <img src="../assets/cmu-logo.png" alt="CMU">
+      <div>
+        <strong>City of Malabon University</strong>
+        <small>CampusVoice · Student Registration</small>
+      </div>
+    </div>
+
+    <div class="footer-col">
+      <b>GET IN TOUCH</b>
+      <small>Pampano cor. Maya-Maya Sts., Longos, City of Malabon</small>
+      <small>
+        <a href="mailto:cmuofficial@cityofmalabonuniversity.edu.ph">
+          cmuofficial@cityofmalabonuniversity.edu.ph
+        </a>
+      </small>
+    </div>
+
+    <div class="footer-col">
+      <b>QUICK LINKS</b>
+      <small>
+        <a href="https://cityofmalabonuniversity.edu.ph/" target="_blank" rel="noopener">
+          Official CMU Website
+        </a>
+        ·
+        <a href="../index.html">Sign In</a>
+      </small>
+    </div>
+
+    <div class="footer-bottom">
+      © 2026 CampusVoice · City of Malabon University
+    </div>
+  </footer>
+
+  <script src="../js/supabase-config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script>
+    const config = window.CAMPUSVOICE_SUPABASE || {};
+    const SUPABASE_URL = config.url;
+    const SUPABASE_KEY = config.publishableKey || config.key || config.anonKey;
+
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+      console.error("CampusVoice Supabase configuration is missing.");
+    }
+
+    const supabaseClient = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_KEY
+    );
+
+    const form = document.getElementById("signupForm");
+    const msg = document.getElementById("msg");
+    const button = document.getElementById("signupBtn");
+    const departmentSelect = document.getElementById("department");
+
+    function showMessage(text, type = "error") {
+      msg.textContent = text;
+      msg.className = "auth-msg show " + (type === "success" ? "success" : "error");
+    }
+
+    async function loadColleges() {
+      departmentSelect.innerHTML = '<option value="">Loading colleges...</option>';
+
+      const { data, error } = await supabaseClient
+        .from("departments")
+        .select("department_id,department_name")
+        .eq("department_type", "college")
+        .order("department_name");
+
+      if (error) {
+        console.error("College loading error:", error);
+        departmentSelect.innerHTML = '<option value="">Unable to load colleges</option>';
+        showMessage("College loading error: " + error.message);
+        return;
+        }
+
+      departmentSelect.innerHTML = '<option value="">Select college / department</option>';
+
+      data.forEach(department => {
+        const option = document.createElement("option");
+        option.value = department.department_id;
+        option.textContent = department.department_name;
+        departmentSelect.appendChild(option);
+      });
+    }
+
+    form.addEventListener("submit", async function(event) {
+      event.preventDefault();
+
+      msg.textContent = "";
+      msg.className = "auth-msg";
+
+      const first = document.getElementById("first").value.trim();
+      const middle = document.getElementById("middle").value.trim();
+      const last = document.getElementById("last").value.trim();
+      const sid = document.getElementById("sid").value.trim();
+      const email = document.getElementById("email").value.trim().toLowerCase();
+      const password = document.getElementById("pw").value;
+      const confirmPassword = document.getElementById("cpw").value;
+      const departmentId = departmentSelect.value;
+
+      const universityEmail = /^[A-Z0-9._%+-]+@cityofmalabonuniversity\.edu\.ph$/i;
+
+      if (!universityEmail.test(email)) {
+        showMessage("Please use your official City of Malabon University email address ending in @cityofmalabonuniversity.edu.ph.");
+        return;
+      }
+
+      if (!sid) {
+        showMessage("Please enter your Student ID.");
+        return;
+      }
+
+      if (!departmentId) {
+        showMessage("Please select your college or department.");
+        return;
+      }
+
+      if (password.length < 8) {
+        showMessage("Password must be at least 8 characters.");
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        showMessage("Passwords do not match.");
+        return;
+      }
+
+      button.disabled = true;
+      button.textContent = "Creating Account...";
+
+      try {
+        const { data, error } = await supabaseClient.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              first_name: first,
+              middle_initial: middle || null,
+              last_name: last,
+              student_id: sid,
+              department_id: departmentId,
+              role: "student"
+            }
+          }
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        console.log("Supabase signup result:", data);
+
+        if (data.session) {
+          showMessage(
+            "Student account created successfully. Redirecting to Sign In...",
+            "success"
+          );
+        } else {
+          showMessage(
+            "Student account created successfully. Please check your university email to confirm your account before signing in.",
+            "success"
+          );
+        }
+
+        form.reset();
+
+        setTimeout(() => {
+          window.location.href = "../index.html";
+        }, 1800);
+
+      } catch (error) {
+        console.error("CampusVoice signup error:", error);
+
+        let message = error.message || "Unable to create your account.";
+
+        if (
+          message.toLowerCase().includes("already registered") ||
+          message.toLowerCase().includes("already exists")
+        ) {
+          message = "This email address is already registered.";
+        }
+
+        if (
+          message.toLowerCase().includes("duplicate") ||
+          message.toLowerCase().includes("student_id")
+        ) {
+          message = "This Student ID may already be registered.";
+        }
+
+        showMessage(message);
+
+      } finally {
+        button.disabled = false;
+        button.textContent = "Create Student Account";
+      }
+    });
+
+    loadColleges();
+  </script>
+</body>
+</html>

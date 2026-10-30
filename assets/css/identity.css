@@ -1,0 +1,45 @@
+/* CampusVoice signature layer — loaded last on every page.
+   Letterhead + rubber-stamp + speech-bubble language, instead of tinted boxes, icon tiles and coloured pills. */
+
+/* ---------- stamps: status / severity / role tags ---------- */
+.badge, .role-tag, .act-tag { background: transparent !important; border: 1px solid currentColor; border-radius: 3px; text-transform: uppercase; font-size: .63rem; letter-spacing: .09em; font-weight: 700; padding: .14rem .48rem; line-height: 1.3; }
+.badge-new { background: var(--gold) !important; color: #3d2a05 !important; border-color: var(--gold); }
+.badge-over { background: var(--bad) !important; color: #fff !important; border-color: var(--bad); }
+.badge-anon { border-style: dashed; }
+.role-tag.student, .act-tag { color: var(--navy); }
+
+/* ---------- toast = a small speech bubble with a tail ---------- */
+.toasts { gap: 18px; }
+.toast { position: relative; display: flex; align-items: flex-start; gap: 10px; background: var(--cream); color: var(--navy); border: 1.5px solid var(--navy); border-left-width: 1.5px; border-radius: 14px 14px 14px 2px; box-shadow: none; font-weight: 500; }
+.toast::before { content: ''; position: absolute; left: 10px; bottom: -11px; border-right: 12px solid transparent; border-top: 10px solid var(--navy); }
+.toast::after { content: ''; position: absolute; left: 11.5px; bottom: -7.5px; border-right: 9px solid transparent; border-top: 8px solid var(--cream); }
+.toast .tg { flex: none; font-family: var(--serif); font-weight: 800; font-size: 1.05rem; line-height: 1.25; }
+.toast.ok .tg { color: var(--ok); } .toast.error .tg { color: var(--bad); }
+.toast.error, .toast.ok { border-left: 1.5px solid var(--navy); }
+
+/* ---------- inline messages: a ruled line of text, not a tinted box ---------- */
+.form-msg { background: none !important; border-radius: 0; padding: .5rem 0; border-bottom: 1px solid currentColor; font-weight: 600; }
+.form-msg.error { color: var(--bad); } .form-msg.ok { color: var(--ok); }
+
+/* ---------- notes: a marginal note between two rules ---------- */
+.note { background: none !important; color: var(--ink); border-radius: 0; padding: 12px 0; border-top: 1px solid #d9cfb3; border-bottom: 1px solid #d9cfb3; }
+.note .ic { color: #a8761a; }
+.note.warn .ic { color: var(--bad); }
+.anon-box { background: none; border: 0; border-top: 1px dashed #b9b3e6; border-bottom: 1px dashed #b9b3e6; border-radius: 0; padding: 12px 0; }
+
+/* ---------- greeting: a letter header, not a coloured banner ---------- */
+.greet { background: var(--cream); color: var(--navy); border: 0; border-top: 2px solid var(--navy); border-bottom: 1px solid #e3d9bf; border-radius: 0; padding: 16px 4px; animation: rise .5s var(--ease); }
+.greet .g-ico { display: none; }
+.greet h3 { font-size: 1.9rem; color: var(--navy); }
+.greet p { color: var(--muted); }
+.greet .g-x { background: none; color: var(--navy); border: 1px solid #d9cfb3; }
+
+/* ---------- notifications (bell + page): ruled entries, a gold dot for unread, no icon tiles ---------- */
+.bp-item { display: block; position: relative; padding: 13px 18px 13px 38px; }
+.bp-item.unread { background: #fdfaf2; }
+.bp-item.unread::before { content: ''; position: absolute; left: 17px; top: 19px; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); }
+.bp-item b { font-family: var(--serif); font-size: .95rem; }
+.bp-urgent, .n-urgent { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid var(--bad); border-radius: 3px; color: var(--bad); font-family: var(--font); font-size: .6rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; vertical-align: 2px; }
+.dot-u { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: transparent; }
+.dot-u.on { background: var(--gold); }
+.n-title { font-family: var(--serif); font-weight: 700; font-size: 1rem; }

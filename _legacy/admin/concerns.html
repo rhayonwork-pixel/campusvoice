@@ -1,0 +1,655 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>All Concerns | CampusVoice</title>
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/admin.css">
+</head>
+<body>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/shell.js"></script>
+
+<script>
+const supabaseClient = window.campusVoiceSupabase;
+
+let concerns = [];
+let categories = [];
+let statuses = [];
+let priorities = [];
+let locations = [];
+let staffUsers = [];
+let studentMap = {};
+
+const params = new URLSearchParams(location.search);
+const quick = params.get("filter") || "";
+
+function statusName(id) {
+    const item = statuses.find(
+        status => String(status.status_id) === String(id)
+    );
+    return item ? item.status_name : "—";
+}
+
+function categoryName(id) {
+    const item = categories.find(
+        category => String(category.category_id) === String(id)
+    );
+    return item ? item.category_name : "—";
+}
+
+function priorityName(id) {
+    const item = priorities.find(
+        priority => String(priority.priority_id) === String(id)
+    );
+    return item ? item.priority_name : "—";
+}
+
+function locationName(id) {
+    const item = locations.find(
+        location => String(location.location_id) === String(id)
+    );
+
+    if (!item) return "—";
+
+    return [
+        item.building,
+        item.floor,
+        item.area
+    ].filter(Boolean).join(" · ") || "—";
+}
+
+function staffName(id) {
+    if (!id) return "Unassigned";
+
+    const item = staffUsers.find(
+        staff => String(staff.user_id) === String(id)
+    );
+
+    if (!item) return "Assigned staff";
+
+    return [
+        item.first_name,
+        item.middle_initial,
+        item.last_name
+    ].filter(Boolean).join(" ") || "Assigned staff";
+}
+
+function priorityBadge(name) {
+    if (name === "Urgent" || name === "High") {
+        return `<span class="badge danger">${esc(name)}</span>`;
+    }
+
+    if (name === "Medium") {
+        return `<span class="badge warn">${esc(name)}</span>`;
+    }
+
+    return `<span class="badge">${esc(name)}</span>`;
+}
+
+function statusBadge(name) {
+    return `<span class="badge">${esc(name)}</span>`;
+}
+
+function showPageError(message) {
+    console.error("All Concerns error:", message);
+
+    const content = `
+        <div class="card">
+            <h3 class="card-title">Unable to Load Concerns</h3>
+            <p>${esc(message)}</p>
+            <button class="btn" onclick="location.reload()">
+                Try Again
+            </button>
+        </div>
+    `;
+
+    shell(
+        "concerns.html",
+        "All Concerns",
+        "Centralized concern monitoring.",
+        content,
+        ""
+    );
+}
+
+async function loadReferenceData() {
+    const results = await Promise.all([
+        supabaseClient
+            .from("categories")
+            .select("category_id, category_name")
+            .order("category_name"),
+
+        supabaseClient
+            .from("statuses")
+            .select("status_id, status_name")
+            .order("status_id"),
+
+        supabaseClient
+            .from("priorities")
+            .select("priority_id, priority_name")
+            .order("priority_id"),
+
+        supabaseClient
+            .from("locations")
+            .select("location_id, building, floor, area")
+            .order("building"),
+
+        supabaseClient
+            .from("users")
+            .select("user_id, first_name, middle_initial, last_name, role, account_status")
+            .eq("role", "staff")
+            .eq("account_status", "active")
+            .order("last_name")
+    ]);
+
+    const [
+        categoryResult,
+        statusResult,
+        priorityResult,
+        locationResult,
+        staffResult
+    ] = results;
+
+    for (const result of results) {
+        if (result.error) throw result.error;
+    }
+
+    categories = categoryResult.data || [];
+    statuses = statusResult.data || [];
+    priorities = priorityResult.data || [];
+    locations = locationResult.data || [];
+    staffUsers = staffResult.data || [];
+}
+
+async function loadConcerns() {
+    const { data, error } = await supabaseClient
+        .from("concerns")
+        .select(`
+            concern_id,
+            concern_code,
+            student_id,
+            category_id,
+            location_id,
+            priority_id,
+            status_id,
+            title,
+            description,
+            date_submitted,
+            created_at,
+            updated_at,
+            resolved_at,
+            closed_at
+        `)
+        .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    concerns = data || [];
+
+    // Load student profiles for the concerns shown in the table.
+    const studentIds = [
+        ...new Set(
+            concerns
+                .map(concern => concern.student_id)
+                .filter(Boolean)
+        )
+    ];
+
+    studentMap = {};
+
+    if (studentIds.length) {
+        const { data: students, error: studentError } =
+            await supabaseClient
+                .from("users")
+                .select(`
+                    user_id,
+                    student_id,
+                    first_name,
+                    middle_initial,
+                    last_name
+                `)
+                .in("user_id", studentIds);
+
+        if (studentError) throw studentError;
+
+        (students || []).forEach(student => {
+            studentMap[String(student.user_id)] = {
+                name: [
+                    student.first_name,
+                    student.middle_initial,
+                    student.last_name
+                ].filter(Boolean).join(" ") || "Student",
+                studentId: student.student_id || "—"
+            };
+        });
+    }
+
+    // Load assignment records for the concerns.
+    const concernIds = concerns.map(
+        concern => concern.concern_id
+    );
+
+    const assignmentMap = {};
+
+    if (concernIds.length) {
+        const { data: assignments, error: assignmentError } =
+            await supabaseClient
+                .from("assignments")
+                .select(`
+                    assignment_id,
+                    concern_id,
+                    staff_id,
+                    assigned_at,
+                    assignment_status
+                `)
+                .in("concern_id", concernIds)
+                .order("assigned_at", { ascending: false });
+
+        if (assignmentError) throw assignmentError;
+
+        // The latest assignment record is used for display.
+        (assignments || []).forEach(assignment => {
+            const key = String(assignment.concern_id);
+
+            if (!assignmentMap[key]) {
+                assignmentMap[key] = assignment;
+            }
+        });
+    }
+
+    concerns = concerns.map(concern => {
+        const assignment =
+            assignmentMap[String(concern.concern_id)] || null;
+
+        const assignmentIsCurrent =
+            assignment &&
+            ["active", "reassigned"].includes(
+                String(assignment.assignment_status).toLowerCase()
+            );
+
+        const assignedStaffId = assignmentIsCurrent
+            ? assignment.staff_id
+            : null;
+
+        return {
+            ...concern,
+            assigned_staff_id: assignedStaffId,
+            assigned_staff_name: staffName(assignedStaffId)
+        };
+    });
+}
+
+function renderConcerns() {
+    const searchInput = document.getElementById("search");
+    const categoryInput = document.getElementById("category");
+    const statusInput = document.getElementById("status");
+    const priorityInput = document.getElementById("priority");
+    const buildingInput = document.getElementById("building");
+    const assignedInput = document.getElementById("assigned");
+
+    if (
+        !searchInput ||
+        !categoryInput ||
+        !statusInput ||
+        !priorityInput ||
+        !buildingInput ||
+        !assignedInput
+    ) {
+        return;
+    }
+
+    const search = searchInput.value.trim().toLowerCase();
+    const categoryFilter = categoryInput.value;
+    const statusFilter = statusInput.value;
+    const priorityFilter = priorityInput.value;
+    const buildingFilter = buildingInput.value;
+    const assignedFilter = assignedInput.value;
+
+    const filtered = concerns.filter(concern => {
+        const student = studentMap[String(concern.student_id)] || {};
+        const category = categoryName(concern.category_id);
+        const status = statusName(concern.status_id);
+        const priority = priorityName(concern.priority_id);
+        const location = locationName(concern.location_id);
+
+        const assigned = concern.assigned_staff_id
+            ? String(concern.assigned_staff_id)
+            : "Unassigned";
+
+        const searchableText = [
+            concern.concern_code,
+            concern.concern_id,
+            concern.title,
+            student.name,
+            student.studentId,
+            category,
+            location,
+            concern.assigned_staff_name
+        ].join(" ").toLowerCase();
+
+        const searchMatch =
+            !search || searchableText.includes(search);
+
+        const categoryMatch =
+            categoryFilter === "All" ||
+            String(concern.category_id) === categoryFilter;
+
+        let statusMatch;
+
+        if (quick === "open") {
+            statusMatch = ![
+                "Resolved",
+                "Closed",
+                "Cancelled"
+            ].includes(status);
+        } else if (quick === "resolved") {
+            statusMatch = status === "Resolved";
+        } else {
+            statusMatch =
+                statusFilter === "All" ||
+                status === statusFilter;
+        }
+
+        let priorityMatch;
+
+        if (quick === "high") {
+            priorityMatch = ["High", "Urgent"].includes(priority);
+        } else {
+            priorityMatch =
+                priorityFilter === "All" ||
+                priority === priorityFilter;
+        }
+
+        const building = locations.find(
+            item => String(item.location_id) === String(concern.location_id)
+        )?.building || "";
+
+        const buildingMatch =
+            buildingFilter === "All" ||
+            building === buildingFilter;
+
+        const assignedMatch =
+            assignedFilter === "All" ||
+            assigned === assignedFilter;
+
+        return (
+            searchMatch &&
+            categoryMatch &&
+            statusMatch &&
+            priorityMatch &&
+            buildingMatch &&
+            assignedMatch
+        );
+    });
+
+    const count = document.getElementById("count");
+    const rows = document.getElementById("rows");
+
+    count.textContent =
+        `${filtered.length} result${filtered.length === 1 ? "" : "s"}`;
+
+    rows.innerHTML = filtered.map(concern => {
+        const student = studentMap[String(concern.student_id)] || {};
+        const category = categoryName(concern.category_id);
+        const location = locationName(concern.location_id);
+        const priority = priorityName(concern.priority_id);
+        const status = statusName(concern.status_id);
+
+        return `
+            <tr>
+                <td>
+                    <a class="link"
+                       href="concern-details.html?id=${encodeURIComponent(concern.concern_id)}">
+                        ${esc(concern.concern_code || concern.concern_id)}
+                    </a>
+                </td>
+
+                <td>
+                    <strong>${esc(concern.title || "Untitled concern")}</strong>
+                    <br>
+                    <span class="card-subtitle">
+                        ${esc(student.name || "Unknown Student")}
+                        · ${esc(student.studentId || "—")}
+                    </span>
+                </td>
+
+                <td>${esc(category)}</td>
+                <td>${esc(location)}</td>
+                <td>${priorityBadge(priority)}</td>
+                <td>${statusBadge(status)}</td>
+                <td>${esc(concern.assigned_staff_name || "Unassigned")}</td>
+
+                <td>
+                    <a class="btn small"
+                       href="concern-details.html?id=${encodeURIComponent(concern.concern_id)}">
+                        Open
+                    </a>
+                </td>
+            </tr>
+        `;
+    }).join("") || `
+        <tr>
+            <td colspan="8" class="empty">
+                No concerns found. Try changing your filters.
+            </td>
+        </tr>
+    `;
+}
+
+function buildPage() {
+    const content = `
+        <div class="concerns-filters">
+            <div class="concerns-search">
+                <label for="search">Search Concerns</label>
+                <input
+                    id="search"
+                    type="search"
+                    placeholder="Search concern ID, student, title, category, location..."
+                >
+            </div>
+
+            <div class="filter-field">
+                <label for="category">Categories</label>
+                <select id="category">
+                    <option value="All">All Categories</option>
+                    ${categories.map(category => `
+                        <option value="${esc(category.category_id)}">
+                            ${esc(category.category_name)}
+                        </option>
+                    `).join("")}
+                </select>
+            </div>
+
+            <div class="filter-field">
+                <label for="status">Status</label>
+                <select id="status">
+                    <option value="All">All Statuses</option>
+                    ${statuses.map(status => `
+                        <option value="${esc(status.status_name)}">
+                            ${esc(status.status_name)}
+                        </option>
+                    `).join("")}
+                </select>
+            </div>
+
+            <div class="filter-field">
+                <label for="priority">Priorities</label>
+                <select id="priority">
+                    <option value="All">All Priorities</option>
+                    ${priorities.map(priority => `
+                        <option value="${esc(priority.priority_name)}">
+                            ${esc(priority.priority_name)}
+                        </option>
+                    `).join("")}
+                </select>
+            </div>
+
+            <div class="filter-field">
+                <label for="building">Locations</label>
+                <select id="building">
+                    <option value="All">All Locations</option>
+                    ${[
+                        ...new Set(
+                            locations.map(item => item.building).filter(Boolean)
+                        )
+                    ].map(building => `
+                        <option value="${esc(building)}">
+                            ${esc(building)}
+                        </option>
+                    `).join("")}
+                </select>
+            </div>
+
+            <div class="filter-field">
+                <label for="assigned">Assigned Staff</label>
+                <select id="assigned">
+                    <option value="All">All Assigned Staff</option>
+                    <option value="Unassigned">Unassigned</option>
+                    ${staffUsers.map(staff => {
+                        const name = [
+                            staff.first_name,
+                            staff.middle_initial,
+                            staff.last_name
+                        ].filter(Boolean).join(" ");
+
+                        return `
+                            <option value="${esc(staff.user_id)}">
+                                ${esc(name || "Staff")}
+                            </option>
+                        `;
+                    }).join("")}
+                </select>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <div>
+                    <h3 class="card-title">All Concerns</h3>
+                    <div class="card-subtitle">
+                        Search, filter, review, prioritize, assign, and monitor every concern.
+                    </div>
+                </div>
+                <span class="filter-count" id="count">Loading...</span>
+            </div>
+
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Concern ID</th>
+                            <th>Concern / Student</th>
+                            <th>Category</th>
+                            <th>Location</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                            <th>Assigned Staff</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="rows">
+                        <tr>
+                            <td colspan="8" class="empty">
+                                Loading concerns...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+
+    shell(
+        "concerns.html",
+        "All Concerns",
+        "Centralized concern monitoring with combined filters.",
+        content,
+        ""
+    );
+
+    [
+        ["search", "input"],
+        ["category", "change"],
+        ["status", "change"],
+        ["priority", "change"],
+        ["building", "change"],
+        ["assigned", "change"]
+    ].forEach(([id, eventName]) => {
+        document.getElementById(id).addEventListener(
+            eventName,
+            renderConcerns
+        );
+    });
+
+    if (quick === "open" || quick === "resolved") {
+        document.getElementById("status").disabled = true;
+    }
+
+    if (quick === "high") {
+        document.getElementById("priority").disabled = true;
+    }
+}
+
+async function initializePage() {
+    try {
+        if (!supabaseClient) {
+            throw new Error(
+                "Supabase client not found. Check ../js/supabase-config.js."
+            );
+        }
+
+        const {
+            data: authData,
+            error: authError
+        } = await supabaseClient.auth.getUser();
+
+        if (authError) throw authError;
+
+        if (!authData.user) {
+            location.href = "../index.html";
+            return;
+        }
+
+        const { data: profile, error: profileError } =
+            await supabaseClient
+                .from("users")
+                .select("user_id, role, account_status")
+                .eq("user_id", authData.user.id)
+                .single();
+
+        if (profileError) throw profileError;
+
+        if (
+            profile.role !== "admin" &&
+            profile.role !== "super_admin"
+        ) {
+            throw new Error("An admin account is required to view all concerns.");
+        }
+
+        await loadReferenceData();
+        await loadConcerns();
+        buildPage();
+        renderConcerns();
+
+    } catch (error) {
+        console.error("All Concerns initialization failed:", {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint
+        });
+
+        showPageError(error.message || "Unable to load concerns.");
+    }
+}
+
+initializePage();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,180 @@
+:root{
+  --navy:#0d2d63;
+  --navy-2:#173f7c;
+  --gold:#f0c65f;
+  --ink:#102746;
+  --muted:#6f8098;
+  --line:#dce4ee;
+  --surface:#f5f8fc;
+  --white:#fff;
+  --danger:#b84b52;
+  --success:#247a56;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:"DM Sans",sans-serif;color:var(--ink)}
+body{background:var(--surface)}
+button,input{font:inherit}
+button{cursor:pointer}
+.signup-page{min-height:100vh;display:grid;grid-template-columns:minmax(420px,.92fr) minmax(540px,1.08fr)}
+.signup-brand{position:relative;overflow:hidden;background:linear-gradient(145deg,#0b2859,#173f7c 65%,#21518f);color:#fff;padding:38px 7vw;display:flex;flex-direction:column}
+.signup-brand:before{content:"";position:absolute;width:420px;height:420px;border:1px solid rgba(255,255,255,.1);border-radius:50%;right:-250px;top:22%;box-shadow:0 0 0 65px rgba(255,255,255,.025),0 0 0 130px rgba(255,255,255,.018)}
+.brand{position:relative;z-index:1;display:flex;align-items:center;gap:12px;color:#fff;text-decoration:none}
+.logo-mark{width:50px;height:50px;border-radius:14px;background:#fff;color:var(--navy);display:grid;place-items:center;font-weight:800;font-size:16px;box-shadow:0 10px 25px rgba(0,0,0,.12)}
+.brand strong{display:block;font-size:20px}.brand span{display:block;font-size:11px;color:rgba(255,255,255,.7);margin-top:3px}
+.brand-content{position:relative;z-index:1;margin:auto 0}
+.eyebrow{font-size:10px;letter-spacing:2px;font-weight:800;color:var(--gold)}
+.brand-content h1{font-family:"Playfair Display",serif;font-size:clamp(44px,5vw,72px);line-height:1.02;margin:16px 0}
+.brand-content h1 em{font-style:normal;color:var(--gold)}
+.brand-content p{max-width:520px;font-size:14px;line-height:1.8;color:rgba(255,255,255,.76);margin:0}
+.mini-features{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:46px}
+.mini-features div{border-top:1px solid rgba(255,255,255,.18);padding-top:14px}
+.mini-features b{display:block;color:var(--gold);font-size:12px;margin-bottom:10px}
+.mini-features span{font-size:12px;color:#fff;font-weight:700}
+.brand-footer{position:absolute;bottom:18px;left:0;width:100%;text-align:center;font-size:10px;letter-spacing:1.4px;opacity:.5}
+.signup-content{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:42px}
+.signup-card{width:min(610px,100%);background:#fff;border:1px solid var(--line);border-radius:22px;padding:34px;box-shadow:0 22px 60px rgba(20,46,80,.08)}
+.heading{margin-bottom:25px}.heading h2{font-family:"Playfair Display",serif;font-size:35px;margin:7px 0;color:var(--navy)}.heading p{font-size:13px;color:var(--muted);margin:0;line-height:1.6}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.field{min-width:0}.field.full{grid-column:1/-1}
+.field label{display:block;font-size:12px;font-weight:700;margin-bottom:8px;color:#27415f}
+.field input{width:100%;height:48px;border:1px solid #ccd7e4;border-radius:10px;padding:0 13px;color:var(--ink);outline:none;transition:.18s;background:#fff}
+.field input:focus{border-color:#3d70b8;box-shadow:0 0 0 4px rgba(61,112,184,.1)}
+.input-wrap{position:relative}.input-wrap input{padding-right:62px}.show-btn{position:absolute;right:8px;top:7px;height:34px;padding:0 9px;border:0;background:transparent;color:var(--navy);font-size:11px;font-weight:800}
+.password-hint{display:block;color:var(--muted);font-size:10px;margin-top:6px}
+.field-error{display:block;min-height:14px;color:var(--danger);font-size:10px;margin-top:5px}
+.terms{display:flex;gap:9px;align-items:flex-start;margin:19px 0 2px;font-size:11px;line-height:1.6;color:var(--muted)}.terms input{margin-top:3px;accent-color:var(--navy)}
+.create-btn{width:100%;height:50px;border:0;border-radius:10px;background:var(--navy);color:#fff;font-weight:800;margin-top:16px;transition:.18s;box-shadow:0 8px 20px rgba(13,45,99,.15)}.create-btn:hover{background:var(--navy-2);transform:translateY(-1px)}.create-btn span{margin-left:8px;color:var(--gold)}
+.form-message{text-align:center;min-height:18px;font-size:11px;font-weight:700;margin:12px 0 0}.form-message.success{color:var(--success)}.form-message.error{color:var(--danger)}
+.signin-link{text-align:center;font-size:11px;color:var(--muted);margin-top:22px}.signin-link a{color:var(--navy);font-weight:800;text-decoration:none}.signin-link a:hover{text-decoration:underline}
+footer{width:min(610px,100%);display:flex;justify-content:center;gap:25px;color:#8a98aa;font-size:10px;margin-top:18px}
+@media (max-width: 1000px) {
+  .signup-page {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .signup-brand {
+    min-height: 350px;
+    padding: 30px 28px;
+  }
+
+  .brand-content {
+    margin: 45px 0 25px;
+  }
+
+  .mini-features {
+    margin-top: 28px;
+  }
+
+  .brand-footer {
+    position: static;
+    margin-top: auto;
+    padding-top: 24px;
+  }
+
+  .signup-content {
+    min-height: auto;
+    padding: 32px 22px;
+  }
+}
+
+@media (max-width: 560px) {
+  .signup-brand {
+    min-height: auto;
+    padding: 25px 20px;
+  }
+
+  .brand-content {
+    margin: 35px 0 20px;
+  }
+
+  .brand-content h1 {
+    font-size: clamp(36px, 10vw, 48px);
+  }
+
+  .brand-content p {
+    font-size: 13px;
+  }
+
+  .mini-features {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .mini-features div:last-child {
+    display: block;
+  }
+
+  .brand-footer {
+    overflow-wrap: anywhere;
+    line-height: 1.6;
+  }
+
+  .signup-content {
+    padding: 22px 12px;
+  }
+
+  .signup-card {
+    width: 100%;
+    padding: 22px 16px;
+    border-radius: 16px;
+  }
+
+  .heading {
+    margin-bottom: 20px;
+  }
+
+  .heading h2 {
+    font-size: clamp(27px, 7vw, 32px);
+  }
+
+  .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .field,
+  .field.full {
+    grid-column: auto;
+    min-width: 0;
+  }
+
+  .field input {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  footer {
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    text-align: center;
+    line-height: 1.5;
+  }
+}
+
+@media (max-width: 360px) {
+  .signup-brand {
+    padding: 22px 15px;
+  }
+
+  .signup-content {
+    padding: 18px 8px;
+  }
+
+  .signup-card {
+    padding: 19px 12px;
+  }
+
+  .brand {
+    gap: 9px;
+  }
+
+  .brand strong {
+    font-size: 18px;
+  }
+
+  .terms {
+    overflow-wrap: anywhere;
+  }
+}

@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Categories | CampusVoice</title>
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/admin.css">
+</head>
+
+<body>
+
+<script src="../js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/shell.js"></script>
+
+<script>
+const supabaseClient = window.supabase.createClient(
+  window.CAMPUSVOICE_SUPABASE.url,
+  window.CAMPUSVOICE_SUPABASE.publishableKey
+);
+
+let categories = [];
+
+async function loadCategories() {
+  const {
+    data,
+    error
+  } = await supabaseClient
+    .from("categories")
+    .select("category_id,category_name,description,status,created_by,created_at,updated_at")
+    .order("category_name");
+
+  if (error) {
+    console.error(error);
+    toast("Unable to load categories.");
+    return;
+  }
+
+  categories = data || [];
+  renderCategories();
+}
+
+function renderCategories() {
+  const search = document
+    .getElementById("search")
+    .value
+    .trim()
+    .toLowerCase();
+
+  const filtered = categories.filter(category =>
+    category.category_name.toLowerCase().includes(search) ||
+    (category.description || "").toLowerCase().includes(search)
+  );
+
+  document.getElementById("rows").innerHTML =
+    filtered.map(category => `
+      <tr>
+        <td>
+          <strong>${esc(category.category_name)}</strong>
+        </td>
+
+        <td>
+          <span class="location-status ${category.status === "active" ? "active" : "inactive"}">
+            ${category.status === "active" ? "Active" : "Inactive"}
+          </span>
+        </td>
+
+        <td>
+          ${esc(
+            category.description ||
+            "Used for organizing and routing campus concerns."
+          )}
+        </td>
+
+        <td>
+          <div class="location-actions">
+            <button
+              class="btn small"
+              onclick="editCategory(${category.category_id})">
+              Edit
+            </button>
+
+            <button
+              class="btn small"
+              onclick="toggleCategory(${category.category_id})">
+              ${category.status === "active" ? "Deactivate" : "Activate"}
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join("") ||
+    `
+      <tr>
+        <td colspan="4" class="empty">
+          No categories found.
+        </td>
+      </tr>
+    `;
+}
+
+const content = `
+<div class="toolbar">
+  <input
+    id="search"
+    placeholder="Search category..."
+    type="search"
+  >
+
+  <button
+    class="btn primary"
+    id="addCategoryButton">
+    ＋ Add Category
+  </button>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <div>
+      <h3 class="card-title">
+        Categories
+      </h3>
+
+      <div class="card-subtitle">
+        Centralized categories automatically propagate to concern forms, filters, and reports.
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Status</th>
+          <th>Description</th>
+          <th></th>
+        </tr>
+      </thead>
+
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+`;
+
+shell(
+  "categories.html",
+  "Categories",
+  "Manage concern categories without deleting historical records.",
+  content,
+  ""
+);
+
+document.getElementById("search").addEventListener(
+  "input",
+  renderCategories
+);
+
+document.getElementById("addCategoryButton").addEventListener(
+  "click",
+  addCategory
+);
+
+async function addCategory() {
+  const box = modal(
+    "Add Category",
+
+    `
+    <div class="field">
+      <label>Category Name</label>
+      <input
+        id="categoryName"
+        type="text"
+        placeholder="Enter category name"
+      >
+    </div>
+
+    <div class="field" style="margin-top:10px">
+      <label>Description</label>
+      <textarea
+        id="categoryDescription"
+        placeholder="Enter category description"
+      ></textarea>
+    </div>
+    `,
+
+    `
+    <button
+      class="btn primary"
+      id="saveCategory">
+      Add Category
+    </button>
+    `
+  );
+
+  box.querySelector("#saveCategory").onclick = async () => {
+    const name = box
+      .querySelector("#categoryName")
+      .value
+      .trim();
+
+    const description = box
+      .querySelector("#categoryDescription")
+      .value
+      .trim();
+
+    if (!name) {
+      toast("Category name is required.");
+      return;
+    }
+
+    const existing = categories.some(
+      category =>
+        category.category_name.toLowerCase() === name.toLowerCase()
+    );
+
+    if (existing) {
+      toast("Category already exists.");
+      return;
+    }
+
+    const session = await supabaseClient.auth.getUser();
+    const currentUser = session.data.user;
+
+    if (!currentUser) {
+      toast("Session expired. Please log in again.");
+      return;
+    }
+
+    const {
+      error
+    } = await supabaseClient
+      .from("categories")
+      .insert({
+        category_name: name,
+        description: description || null,
+        status: "active",
+        created_by: currentUser.id
+      });
+
+    if (error) {
+      console.error(error);
+      toast(error.message || "Unable to add category.");
+      return;
+    }
+
+    box.remove();
+
+    await loadCategories();
+
+    toast("Category added successfully.");
+  };
+}
+
+async function editCategory(id) {
+  const category = categories.find(
+    item => item.category_id === id
+  );
+
+  if (!category) {
+    toast("Category not found.");
+    return;
+  }
+
+  const box = modal(
+    "Edit Category",
+
+    `
+    <div class="field">
+      <label>Category Name</label>
+      <input
+        id="categoryName"
+        type="text"
+        value="${esc(category.category_name)}"
+      >
+    </div>
+
+    <div class="field" style="margin-top:10px">
+      <label>Description</label>
+      <textarea
+        id="categoryDescription"
+      >${esc(category.description || "")}</textarea>
+    </div>
+
+    <div class="field" style="margin-top:10px">
+      <label>Status</label>
+
+      <select id="categoryStatus">
+        <option
+          value="active"
+          ${category.status === "active" ? "selected" : ""}>
+          Active
+        </option>
+
+        <option
+          value="inactive"
+          ${category.status === "inactive" ? "selected" : ""}>
+          Inactive
+        </option>
+      </select>
+    </div>
+
+    <div class="alert warn" style="margin-top:12px">
+      Deactivate instead of deleting categories that are referenced by historical concerns.
+    </div>
+    `,
+
+    `
+    <button
+      class="btn primary"
+      id="saveCategory">
+      Save Changes
+    </button>
+    `
+  );
+
+  box.querySelector("#saveCategory").onclick = async () => {
+    const name = box
+      .querySelector("#categoryName")
+      .value
+      .trim();
+
+    const description = box
+      .querySelector("#categoryDescription")
+      .value
+      .trim();
+
+    const status = box
+      .querySelector("#categoryStatus")
+      .value;
+
+    if (!name) {
+      toast("Category name is required.");
+      return;
+    }
+
+    const duplicate = categories.some(
+      item =>
+        item.category_id !== id &&
+        item.category_name.toLowerCase() === name.toLowerCase()
+    );
+
+    if (duplicate) {
+      toast("Another category already uses this name.");
+      return;
+    }
+
+    const {
+      error
+    } = await supabaseClient
+      .from("categories")
+      .update({
+        category_name: name,
+        description: description || null,
+        status: status,
+        updated_at: new Date().toISOString()
+      })
+      .eq("category_id", id);
+
+    if (error) {
+      console.error(error);
+      toast(error.message || "Unable to update category.");
+      return;
+    }
+
+    box.remove();
+
+    await loadCategories();
+
+    toast("Category updated successfully.");
+  };
+}
+
+async function toggleCategory(id) {
+  const category = categories.find(
+    item => item.category_id === id
+  );
+
+  if (!category) {
+    toast("Category not found.");
+    return;
+  }
+
+  const newStatus =
+    category.status === "active"
+      ? "inactive"
+      : "active";
+
+  const action =
+    newStatus === "inactive"
+      ? "deactivate"
+      : "activate";
+
+  const box = modal(
+    newStatus === "inactive"
+      ? "Deactivate Category"
+      : "Activate Category",
+
+    `
+    <p>
+      Are you sure you want to ${action}
+      <strong>${esc(category.category_name)}</strong>?
+    </p>
+
+    ${
+      newStatus === "inactive"
+        ? `
+          <div class="alert warn" style="margin-top:12px">
+            Existing historical concerns will remain intact.
+            This category will simply stop appearing as an active option.
+          </div>
+        `
+        : ""
+    }
+    `,
+
+    `
+    <button
+      class="btn primary"
+      id="confirmStatus">
+      ${newStatus === "inactive" ? "Deactivate" : "Activate"}
+    </button>
+    `
+  );
+
+  box.querySelector("#confirmStatus").onclick = async () => {
+    const {
+      error
+    } = await supabaseClient
+      .from("categories")
+      .update({
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq("category_id", id);
+
+    if (error) {
+      console.error(error);
+      toast(error.message || "Unable to update category status.");
+      return;
+    }
+
+    box.remove();
+
+    await loadCategories();
+
+    toast(
+      newStatus === "inactive"
+        ? "Category deactivated."
+        : "Category activated."
+    );
+  };
+}
+
+loadCategories();
+</script>
+
+</body>
+</html>

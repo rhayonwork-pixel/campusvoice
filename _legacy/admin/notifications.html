@@ -1,0 +1,255 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Notifications | CampusVoice</title>
+
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/admin.css">
+</head>
+
+<body>
+
+    <!-- Supabase and existing app scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../js/supabase-config.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/shell.js"></script>
+
+    <script>
+    (async function () {
+        "use strict";
+
+        const sb = window.campusVoiceSupabase;
+
+        const user = JSON.parse(
+            localStorage.getItem("campusvoiceUser") ||
+            sessionStorage.getItem("campusvoiceUser") ||
+            "null"
+        );
+
+        const content = `
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <h3 class="card-title">Notifications</h3>
+
+                        <div class="card-subtitle">
+                            System alerts and administrative updates.
+                        </div>
+                    </div>
+
+                    <button
+                        class="btn small"
+                        id="markRead"
+                        type="button"
+                    >
+                        Mark all as read
+                    </button>
+                </div>
+
+                <div
+                    id="noticeList"
+                    class="notification-list"
+                    aria-live="polite"
+                >
+                    <div class="empty">
+                        Loading notifications...
+                    </div>
+                </div>
+            </div>
+        `;
+
+        shell(
+            "notifications.html",
+            "Notifications",
+            "System alerts and administrative updates.",
+            content,
+            ""
+        );
+
+        const noticeList =
+            document.getElementById("noticeList");
+
+        const markReadButton =
+            document.getElementById("markRead");
+
+        const currentUserId =
+    user?.userId || user?.user_id;
+
+if (!sb || !currentUserId) {
+    noticeList.innerHTML = `
+        <div class="empty">
+            Unable to identify your account.
+            Please sign in again.
+        </div>
+    `;
+    return;
+}
+
+        let notifications = [];
+
+        function escapeHtml(value) {
+            return String(value ?? "").replace(
+                /[&<>"']/g,
+                character => ({
+                    "&": "&amp;",
+                    "<": "&lt;",
+                    ">": "&gt;",
+                    '"': "&quot;",
+                    "'": "&#039;"
+                })[character]
+            );
+        }
+
+        function renderNotifications() {
+            if (notifications.length === 0) {
+                noticeList.innerHTML = `
+                    <div class="empty">
+                        You have no notifications yet.
+                    </div>
+                `;
+                return;
+            }
+
+            noticeList.innerHTML = notifications.map(notification => {
+                const createdAt = notification.created_at
+                    ? new Date(
+                        notification.created_at
+                    ).toLocaleString()
+                    : "";
+
+                const viewLink = notification.concern_id
+                    ? `
+                        <a
+                            class="link"
+                            href="concerns.html"
+                        >
+                            View →
+                        </a>
+                    `
+                    : "";
+
+                return `
+                    <div class="notice ${
+                        notification.is_read ? "" : "unread"
+                    }">
+                        <span class="notice-dot"></span>
+
+                        <div>
+                            <b>
+                                ${escapeHtml(notification.title)}
+                            </b>
+
+                            <p>
+                                ${escapeHtml(notification.message)}
+                            </p>
+
+                            <small>
+                                ${escapeHtml(createdAt)}
+                                ${
+                                    notification.is_read
+                                        ? ""
+                                        : " · New"
+                                }
+                            </small>
+                        </div>
+
+                        ${viewLink}
+                    </div>
+                `;
+            }).join("");
+        }
+
+        async function loadNotifications() {
+            noticeList.innerHTML = `
+                <div class="empty">
+                    Loading notifications...
+                </div>
+            `;
+
+            const { data, error } = await sb
+                .from("notifications")
+                .select(`
+                    notification_id,
+                    user_id,
+                    concern_id,
+                    title,
+                    message,
+                    is_read,
+                    created_at
+                `)
+                .eq("user_id", currentUserId)
+                .order("created_at", {
+                    ascending: false
+                });
+
+            if (error) {
+                console.error(
+                    "Notifications loading error:",
+                    error
+                );
+
+                noticeList.innerHTML = `
+                    <div class="empty">
+                        Could not load notifications.
+                        Please try again.
+                    </div>
+                `;
+                return;
+            }
+
+            notifications = data || [];
+
+            renderNotifications();
+        }
+
+        markReadButton.addEventListener(
+            "click",
+            async function () {
+                const unreadIds = notifications
+                    .filter(notification => !notification.is_read)
+                    .map(notification => notification.notification_id);
+
+                if (unreadIds.length === 0) {
+                    return;
+                }
+
+                markReadButton.disabled = true;
+
+                const { error } = await sb
+                    .from("notifications")
+                    .update({
+                        is_read: true
+                    })
+                    .in("notification_id", unreadIds)
+                    .eq("user_id", user.user_id);
+
+                markReadButton.disabled = false;
+
+                if (error) {
+                    console.error(
+                        "Mark as read error:",
+                        error
+                    );
+
+                    alert(
+                        "Could not mark notifications as read."
+                    );
+                    return;
+                }
+
+                await loadNotifications();
+            }
+        );
+
+        await loadNotifications();
+
+    })();
+    </script>
+
+</body>
+</html>

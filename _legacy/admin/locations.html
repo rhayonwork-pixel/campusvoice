@@ -1,0 +1,483 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Locations | CampusVoice</title>
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/admin.css">
+</head>
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../js/supabase-config.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/shell.js"></script>
+
+    <script>
+    (function () {
+        "use strict";
+
+        const supabaseClient = window.campusVoiceSupabase;
+
+        let currentUser = null;
+        let locations = [];
+        let editingId = null;
+
+        if (!supabaseClient) {
+            document.body.innerHTML =
+                "<p style='padding:24px'>CampusVoice connection is unavailable. Check your Supabase configuration.</p>";
+            return;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+
+        function showMessage(message, isError = false) {
+            const element = document.getElementById("locationMessage");
+            if (!element) return;
+
+            element.textContent = message;
+            element.style.color = isError ? "#b42318" : "#087443";
+        }
+
+        function clearMessage() {
+            showMessage("");
+        }
+
+        const content = `
+            <div class="card">
+                <div class="page-heading">
+                    <div>
+                        <div class="eyebrow">CAMPUS MANAGEMENT</div>
+                        <h2>Locations</h2>
+                        <p class="card-subtitle">
+                            Manage verified campus buildings, floors, and areas used for concern reporting.
+                        </p>
+                    </div>
+                    <button class="btn gold" id="addLocationButton" type="button">
+                        + Add Location
+                    </button>
+                </div>
+
+                <div id="locationMessage" class="card-subtitle"
+                     role="status" aria-live="polite"
+                     style="margin:18px 0;"></div>
+
+                <div id="locationFormContainer" style="display:none;">
+                    <div class="location-form-card">
+                        <h3 id="locationFormTitle">Add Location</h3>
+
+                        <form id="locationForm">
+                            <div class="location-form-grid">
+                                <div class="form-group">
+                                    <label for="building">Building</label>
+                                    <input id="building" type="text"
+                                           maxlength="150"
+                                           placeholder="e.g. Verified Building Name"
+                                           required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="floor">Floor</label>
+                                    <input id="floor" type="text"
+                                           maxlength="100"
+                                           placeholder="e.g. 2nd Floor"
+                                           required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="area">Area / Room</label>
+                                    <input id="area" type="text"
+                                           maxlength="150"
+                                           placeholder="e.g. Computer Laboratory"
+                                           required>
+                                </div>
+                            </div>
+
+                            <div class="actions">
+                                <button class="btn" id="cancelLocationButton"
+                                        type="button">Cancel</button>
+                                <button class="btn gold" id="saveLocationButton"
+                                        type="submit">Save Location</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:18px;">
+                <div class="location-toolbar">
+                    <div>
+                        <strong>Campus Locations</strong>
+                        <div class="card-subtitle">
+                            Active and inactive locations
+                        </div>
+                    </div>
+
+                    <input id="locationSearch" class="location-search"
+                           type="search"
+                           placeholder="Search building, floor, or area..."
+                           aria-label="Search campus locations">
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Building</th>
+                                <th>Floor</th>
+                                <th>Area / Room</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="locationsTableBody">
+                            <tr>
+                                <td colspan="5" style="text-align:center;padding:24px;">
+                                    Loading locations...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        const footer = `
+            <footer class="footer">
+                <div class="footer-grid">
+                    <div>
+                        <h4>CampusVoice</h4>
+                        <div class="goldline"></div>
+                        <p>A web-based concern management system for City of Malabon University.</p>
+                    </div>
+                    <div>
+                        <h4>Get in Touch</h4>
+                        <p>Pampano cor. Maya-Maya Sts., Longos, Malabon City</p>
+                        <p>cmuofficial@cityofmalabonuniversity.edu.ph</p>
+                    </div>
+                    <div>
+                        <h4>Quick Links</h4>
+                        <a href="help.html">Help &amp; Support</a>
+                        <a href="profile.html">My Profile</a>
+                    </div>
+                </div>
+            </footer>
+        `;
+
+        shell(
+            "locations.html",
+            "Locations",
+            "Manage verified campus locations.",
+            content,
+            footer
+        );
+
+        function showForm(location = null) {
+            editingId = location ? location.location_id : null;
+
+            document.getElementById("locationFormTitle").textContent =
+                location ? "Edit Location" : "Add Location";
+
+            document.getElementById("saveLocationButton").textContent =
+                location ? "Save Changes" : "Save Location";
+
+            document.getElementById("building").value =
+                location ? location.building : "";
+
+            document.getElementById("floor").value =
+                location ? location.floor : "";
+
+            document.getElementById("area").value =
+                location ? location.area : "";
+
+            document.getElementById("locationFormContainer").style.display = "block";
+            clearMessage();
+            document.getElementById("building").focus();
+        }
+
+        function hideForm() {
+            document.getElementById("locationFormContainer").style.display = "none";
+            document.getElementById("locationForm").reset();
+            editingId = null;
+            clearMessage();
+        }
+
+        function renderLocations(data = locations) {
+            const tbody = document.getElementById("locationsTableBody");
+
+            if (!data.length) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align:center;padding:35px;">
+                            <strong>No locations found</strong>
+                            <div class="card-subtitle" style="margin-top:5px;">
+                                Add a verified campus location or try another search.
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = data.map(location => `
+                <tr>
+                    <td><strong>${escapeHtml(location.building)}</strong></td>
+                    <td>${escapeHtml(location.floor)}</td>
+                    <td>${escapeHtml(location.area)}</td>
+                    <td>
+                        <span class="location-status ${
+                            location.status === "active" ? "active" : "inactive"
+                        }">
+                            ${location.status === "active" ? "Active" : "Inactive"}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="location-actions">
+                            <button class="btn small" type="button"
+                                    data-action="edit"
+                                    data-id="${escapeHtml(location.location_id)}">
+                                Edit
+                            </button>
+                            <button class="btn small" type="button"
+                                    data-action="toggle"
+                                    data-id="${escapeHtml(location.location_id)}">
+                                ${location.status === "active" ? "Deactivate" : "Activate"}
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join("");
+        }
+
+        function applySearch() {
+            const keyword = document.getElementById("locationSearch")
+                .value.trim().toLowerCase();
+
+            const filtered = locations.filter(location =>
+                [location.building, location.floor, location.area]
+                    .some(value => String(value ?? "").toLowerCase().includes(keyword))
+            );
+
+            renderLocations(filtered);
+        }
+
+        async function loadLocations() {
+            const tbody = document.getElementById("locationsTableBody");
+
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" style="text-align:center;padding:24px;">
+                        Loading locations...
+                    </td>
+                </tr>
+            `;
+
+            try {
+                const { data, error } = await supabaseClient
+                    .from("locations")
+                    .select("location_id,building,floor,area,status,created_at")
+                    .order("building")
+                    .order("floor")
+                    .order("area");
+
+                if (error) throw error;
+
+                locations = data || [];
+                applySearch();
+            } catch (error) {
+                console.error("Load locations error:", error);
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align:center;padding:24px;">
+                            Unable to load locations. Check the Console for details.
+                        </td>
+                    </tr>
+                `;
+                showMessage(error.message || "Unable to load locations.", true);
+            }
+        }
+
+        function isDuplicate(building, floor, area) {
+            return locations.some(location =>
+                String(location.location_id) !== String(editingId) &&
+                String(location.building).trim().toLowerCase() === building.toLowerCase() &&
+                String(location.floor).trim().toLowerCase() === floor.toLowerCase() &&
+                String(location.area).trim().toLowerCase() === area.toLowerCase()
+            );
+        }
+
+        async function saveLocation(event) {
+            event.preventDefault();
+
+            const building = document.getElementById("building").value.trim();
+            const floor = document.getElementById("floor").value.trim();
+            const area = document.getElementById("area").value.trim();
+            const button = document.getElementById("saveLocationButton");
+
+            if (!building || !floor || !area) {
+                showMessage("Please complete all location fields.", true);
+                return;
+            }
+
+            if (isDuplicate(building, floor, area)) {
+                showMessage("This building, floor, and area combination already exists.", true);
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = "Saving...";
+            clearMessage();
+
+            try {
+                let result;
+
+                if (editingId !== null) {
+                    result = await supabaseClient
+                        .from("locations")
+                        .update({
+                            building,
+                            floor,
+                            area,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq("location_id", editingId);
+                } else {
+                    if (!currentUser) {
+                        throw new Error("Your session has expired. Please log in again.");
+                    }
+
+                    result = await supabaseClient
+                        .from("locations")
+                        .insert({
+                            building,
+                            floor,
+                            area,
+                            status: "active",
+                            created_by: currentUser.id
+                        });
+                }
+
+                if (result.error) throw result.error;
+
+                const wasEditing = editingId !== null;
+                hideForm();
+                await loadLocations();
+
+                showMessage(
+                    wasEditing ? "Location updated successfully." : "Location added successfully."
+                );
+            } catch (error) {
+                console.error("Save location error:", error);
+                showMessage(error.message || "Unable to save location.", true);
+            } finally {
+                button.disabled = false;
+                button.textContent = editingId !== null ? "Save Changes" : "Save Location";
+            }
+        }
+
+        async function toggleLocation(id) {
+            const location = locations.find(
+                item => String(item.location_id) === String(id)
+            );
+
+            if (!location) {
+                showMessage("Location not found. Refresh and try again.", true);
+                return;
+            }
+
+            const newStatus = location.status === "active" ? "inactive" : "active";
+            const action = newStatus === "inactive" ? "deactivate" : "activate";
+
+            if (!window.confirm(
+                `Are you sure you want to ${action} "${location.building} — ${location.floor} — ${location.area}"?`
+            )) {
+                return;
+            }
+
+            try {
+                const { error } = await supabaseClient
+                    .from("locations")
+                    .update({
+                        status: newStatus,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq("location_id", id);
+
+                if (error) throw error;
+
+                await loadLocations();
+                showMessage(
+                    newStatus === "active"
+                        ? "Location activated successfully."
+                        : "Location deactivated successfully."
+                );
+            } catch (error) {
+                console.error("Toggle location error:", error);
+                showMessage(error.message || "Unable to update location status.", true);
+            }
+        }
+
+        document.getElementById("addLocationButton").addEventListener("click", () => {
+            showForm();
+        });
+
+        document.getElementById("cancelLocationButton").addEventListener("click", hideForm);
+
+        document.getElementById("locationForm").addEventListener("submit", saveLocation);
+
+        document.getElementById("locationSearch").addEventListener("input", applySearch);
+
+        document.getElementById("locationsTableBody").addEventListener("click", event => {
+            const button = event.target.closest("button[data-action]");
+            if (!button) return;
+
+            const id = button.dataset.id;
+
+            if (button.dataset.action === "edit") {
+                const location = locations.find(
+                    item => String(item.location_id) === String(id)
+                );
+
+                if (location) showForm(location);
+            }
+
+            if (button.dataset.action === "toggle") {
+                toggleLocation(id);
+            }
+        });
+
+        async function initializePage() {
+            try {
+                const { data, error } = await supabaseClient.auth.getUser();
+
+                if (error) throw error;
+
+                if (!data.user) {
+                    window.location.href = "../index.html";
+                    return;
+                }
+
+                currentUser = data.user;
+                await loadLocations();
+            } catch (error) {
+                console.error("Locations initialization error:", error);
+                showMessage(
+                    error.message || "Unable to initialize Locations page.",
+                    true
+                );
+            }
+        }
+
+        initializePage();
+    })();
+    </script>
+</body>
+</html>

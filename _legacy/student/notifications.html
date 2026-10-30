@@ -1,0 +1,330 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Notifications | CampusVoice</title>
+
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/student.css">
+</head>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../js/supabase-config.js"></script>
+    <script src="../js/shell.js"></script>
+
+    <script>
+        const supabaseClient = window.campusVoiceSupabase;
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function formatDate(value) {
+            if (!value) return "—";
+
+            const date = new Date(value);
+
+            if (Number.isNaN(date.getTime())) return "—";
+
+            return date.toLocaleString("en-PH", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit"
+            });
+        }
+
+        const content = `
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <h3 class="card-title">Notifications</h3>
+
+                        <div class="card-subtitle">
+                            Updates related to your concerns.
+                            Click a notification to open the related concern.
+                        </div>
+                    </div>
+
+                    <button class="btn small" id="markRead" type="button">
+                        Mark all as read
+                    </button>
+                </div>
+
+                <div id="noticeList" class="notification-list">
+                    <div class="empty">Loading notifications...</div>
+                </div>
+            </div>
+        `;
+
+        shell(
+            "notifications.html",
+            "Notifications",
+            "Stay informed about concern updates and system messages.",
+            content,
+            ""
+        );
+
+        async function render() {
+            const noticeList = document.getElementById("noticeList");
+            const markReadButton = document.getElementById("markRead");
+
+            if (!noticeList || !markReadButton) return;
+
+            try {
+                if (!supabaseClient) {
+                    throw new Error("Supabase client is unavailable.");
+                }
+
+                const {
+                    data: { user },
+                    error: authError
+                } = await supabaseClient.auth.getUser();
+
+                if (authError) throw authError;
+
+                if (!user) {
+                    window.location.href = "../index.html";
+                    return;
+                }
+
+                const { data: notifications, error } = await supabaseClient
+                    .from("notifications")
+                    .select(`
+                        notification_id,
+                        user_id,
+                        concern_id,
+                        title,
+                        message,
+                        is_read,
+                        created_at
+                    `)
+                    .eq("user_id", user.id)
+                    .order("created_at", { ascending: false });
+
+                if (error) throw error;
+
+                if (!notifications || notifications.length === 0) {
+                    noticeList.innerHTML =
+                        '<div class="empty">No notifications yet.</div>';
+
+                    markReadButton.disabled = true;
+                    return;
+                }
+
+                markReadButton.disabled =
+                    !notifications.some(notification => !notification.is_read);
+
+                noticeList.innerHTML = notifications.map(notification => {
+                    const unreadClass = notification.is_read
+                        ? ""
+                        : " unread";
+
+                    const concernLink = notification.concern_id
+                        ? `concern-details.html?id=${encodeURIComponent(notification.concern_id)}`
+                        : "";
+
+                    const title = notification.title || "Notification";
+                    const lowerTitle = title.toLowerCase();
+
+                    const iconClass =
+                        lowerTitle.includes("resolved") ||
+                        lowerTitle.includes("closed")
+                            ? "resolved"
+                            : lowerTitle.includes("review") ||
+                              lowerTitle.includes("submitted")
+                                ? "pending"
+                                : "";
+
+                    const icon = iconClass === "resolved"
+                        ? "✓"
+                        : iconClass === "pending"
+                            ? "◷"
+                            : "⚒";
+
+                    return `
+                        <div
+                            class="notification-item${unreadClass}"
+                            data-notification-id="${escapeHtml(notification.notification_id)}"
+                            ${concernLink
+                                ? `data-concern-link="${escapeHtml(concernLink)}"`
+                                : ""}
+                            style="cursor:${concernLink ? "pointer" : "default"}"
+                            ${concernLink ? 'role="link" tabindex="0"' : ""}
+                        >
+                            <div class="notification-icon ${iconClass}">
+                                ${icon}
+                            </div>
+
+                            <div class="notification-content">
+                                <strong>${escapeHtml(title)}</strong>
+                                <p>${escapeHtml(notification.message || "")}</p>
+                            </div>
+
+                            <time class="notification-time">
+                                ${formatDate(notification.created_at)}
+                            </time>
+
+                            <span class="notification-arrow" aria-hidden="true">
+                                ›
+                            </span>
+                        </div>
+                    `;
+                }).join("");
+
+                
+noticeList.querySelectorAll(".notification-item").forEach(item => {
+    const openConcern = async () => {
+        if (item.dataset.opening === "true") return;
+        item.dataset.opening = "true";
+
+        const notificationId = item.dataset.notificationId;
+        const concernLink = item.dataset.concernLink;
+
+        try {
+            if (item.classList.contains("unread")) {
+                const { error } = await supabaseClient
+                    .from("notifications")
+                    .update({ is_read: true })
+                    .eq("notification_id", notificationId)
+                    .eq("user_id", (await supabaseClient.auth.getUser()).data.user.id);
+
+                if (error) throw error;
+
+                // Remove the unread styling immediately.
+                item.classList.remove("unread");
+
+                const dot = item.querySelector(".notification-unread-dot");
+                if (dot) dot.remove();
+
+                // Refresh the list so the read state stays consistent.
+                await render();
+            }
+        } catch (error) {
+            console.error("Unable to mark notification as read:", error);
+        }
+
+        if (concernLink) {
+            window.location.href = concernLink;
+        } else {
+            item.dataset.opening = "false";
+        }
+    };
+
+    item.addEventListener("click", openConcern);
+
+    item.addEventListener("keydown", event => {
+        if (
+            (event.key === "Enter" || event.key === " ") &&
+            item.dataset.concernLink
+        ) {
+            event.preventDefault();
+            openConcern();
+        }
+    });
+});
+
+            } catch (error) {
+                console.error("Notifications loading error:", error);
+
+                noticeList.innerHTML = `
+                    <div class="empty">
+                        Unable to load notifications.
+                        Please refresh the page and try again.
+                    </div>
+                `;
+
+                markReadButton.disabled = true;
+            }
+        }
+
+        document.getElementById("markRead").addEventListener("click", async () => {
+            const button = document.getElementById("markRead");
+
+            try {
+                button.disabled = true;
+
+                const {
+                    data: { user },
+                    error: authError
+                } = await supabaseClient.auth.getUser();
+
+                if (authError) throw authError;
+                if (!user) throw new Error("Please log in again.");
+
+                const { error } = await supabaseClient
+                    .from("notifications")
+                    .update({ is_read: true })
+                    .eq("user_id", user.id)
+                    .eq("is_read", false);
+
+                if (error) throw error;
+
+                if (typeof toast === "function") {
+                    toast("All notifications marked as read.");
+                }
+
+                await render();
+
+            } catch (error) {
+                console.error("Mark notifications as read error:", error);
+
+                if (typeof toast === "function") {
+                    toast("Unable to mark notifications as read.");
+                }
+
+                button.disabled = false;
+            }
+        });
+
+        render();
+        
+
+(async function setupNotificationRealtime() {
+    try {
+        const {
+            data: { user: currentUser },
+            error
+        } = await supabaseClient.auth.getUser();
+
+        if (error) throw error;
+        if (!currentUser) return;
+
+        supabaseClient
+            .channel("student-notifications-live")
+            .on(
+                "postgres_changes",
+                {
+                    event: "INSERT",
+                    schema: "public",
+                    table: "notifications",
+                    filter: `user_id=eq.${currentUser.id}`
+                },
+                async () => {
+                    await render();
+
+                    if (typeof toast === "function") {
+                        toast("You have a new notification.");
+                    }
+                }
+            )
+            .subscribe();
+
+    } catch (error) {
+        console.error("Notification Realtime setup error:", error);
+    }
+})();
+
+
+    </script>
+</body>
+</html>

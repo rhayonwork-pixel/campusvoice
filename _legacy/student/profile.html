@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Profile | CampusVoice</title>
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/student.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/shell.js"></script>
+
+<style>
+.profile-top {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 18px;
+}
+.profile-avatar-large {
+    width: 88px;
+    height: 88px;
+    flex: 0 0 88px;
+    border-radius: 50%;
+    background: #e8eefb;
+    color: #102b63;
+    display: grid;
+    place-items: center;
+    font-size: 28px;
+    font-weight: 700;
+    overflow: hidden;
+}
+.profile-avatar-large img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.profile-top h2 {
+    margin: 0 0 8px;
+    font-size: 24px;
+    color: #102b63;
+}
+.profile-top p {
+    margin: 0;
+    color: #64748b;
+    font-size: 14px;
+}
+.profile-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 22px;
+    margin-top: 18px;
+}
+.profile-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+.profile-field.full {
+    grid-column: 1 / -1;
+}
+.profile-field label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #17324d;
+}
+.profile-field input {
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    background: #f8fafc;
+    color: #17324d;
+    font-family: inherit;
+    font-size: 14px;
+}
+.profile-field input:disabled {
+    color: #526176;
+    cursor: not-allowed;
+    opacity: 1;
+}
+.profile-field input:not(:disabled):focus {
+    outline: 2px solid #bfdbfe;
+    border-color: #2563eb;
+}
+.profile-hint {
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.5;
+}
+.profile-alert {
+    display: none;
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 9px;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+.profile-alert.show {
+    display: block;
+}
+.profile-alert.success {
+    color: #166534;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+}
+.profile-alert.error {
+    color: #991b1b;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+}
+.profile-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+}
+.profile-form-actions [hidden] {
+    display: none !important;
+}
+.profile-form-actions button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+.user-menu .avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+@media (max-width: 650px) {
+    .profile-form-grid {
+        grid-template-columns: 1fr;
+        gap: 14px;
+    }
+    .profile-field.full {
+        grid-column: auto;
+    }
+    .profile-top {
+        align-items: flex-start;
+        gap: 14px;
+    }
+    .profile-avatar-large {
+        width: 72px;
+        height: 72px;
+        flex-basis: 72px;
+        font-size: 23px;
+    }
+    .profile-top h2 {
+        font-size: 20px;
+    }
+    .profile-form-actions {
+        flex-direction: column;
+    }
+    .profile-form-actions .btn {
+        width: 100%;
+    }
+}
+</style>
+</head>
+
+<body>
+<script>
+(() => {
+    "use strict";
+
+    const sb = window.campusVoiceSupabase;
+    const PHOTO_BUCKET = "profile-pictures";
+
+    let savedUser = null;
+
+    try {
+        savedUser = JSON.parse(
+            localStorage.getItem("campusvoiceUser") ||
+            sessionStorage.getItem("campusvoiceUser") ||
+            "null"
+        );
+    } catch (error) {
+        console.warn("Could not read saved session.", error);
+    }
+
+    const content = `
+        <section class="card form-card">
+            <div class="profile-top">
+                <div class="profile-avatar-large" id="profileAvatar">
+                    <span>CV</span>
+                </div>
+                <div>
+                    <h2 id="profileName">Loading profile...</h2>
+                    <p id="profileDescription">Student account</p>
+                </div>
+            </div>
+
+            <form id="profileForm">
+                <div class="profile-form-grid">
+                    <div class="profile-field">
+                        <label for="firstName">First Name</label>
+                        <input id="firstName" type="text" disabled>
+                    </div>
+                    <div class="profile-field">
+                        <label for="middleInitial">Middle Initial</label>
+                        <input id="middleInitial" type="text" disabled>
+                    </div>
+                    <div class="profile-field">
+                        <label for="lastName">Last Name</label>
+                        <input id="lastName" type="text" disabled>
+                    </div>
+                    <div class="profile-field">
+                        <label for="studentId">Student ID</label>
+                        <input id="studentId" type="text" disabled>
+                    </div>
+                    <div class="profile-field">
+                        <label for="email">University Email</label>
+                        <input id="email" type="email" disabled>
+                    </div>
+                    <div class="profile-field">
+                        <label for="role">Account Role</label>
+                        <input id="role" type="text" disabled>
+                    </div>
+                    <div class="profile-field">
+                        <label for="contact">Contact Number</label>
+                        <input id="contact" type="tel" maxlength="30"
+                            autocomplete="tel"
+                            placeholder="Enter your contact number" disabled>
+                    </div>
+                    <div class="profile-field">
+                        <label for="photo">Profile Picture</label>
+                        <input id="photo" type="file"
+                            accept="image/jpeg,image/png,image/webp" disabled>
+                        <span class="profile-hint">
+                            JPG, PNG, or WebP. Maximum size: 2 MB.
+                        </span>
+                    </div>
+                    <div class="profile-field full">
+                        <label for="password">New Password</label>
+                        <input id="password" type="password" minlength="8"
+                            autocomplete="new-password"
+                            placeholder="Leave blank to keep current password" disabled>
+                        <span class="profile-hint">
+                            Use at least 8 characters. Leave blank if you do not
+                            want to change your password.
+                        </span>
+                    </div>
+                    <div class="profile-field full">
+                        <label for="confirmPassword">Confirm New Password</label>
+                        <input id="confirmPassword" type="password" minlength="8"
+                            autocomplete="new-password"
+                            placeholder="Re-enter your new password" disabled>
+                    </div>
+                </div>
+
+                <div id="profileMessage" class="profile-alert"
+                    role="status" aria-live="polite"></div>
+
+                <div class="profile-form-actions">
+                    <button type="button" class="btn" id="editProfile" disabled>
+                        Edit Profile
+                    </button>
+                    <button type="button" class="btn" id="cancelEdit" hidden>
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn gold" id="saveProfile" hidden>
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </section>
+    `;
+
+    if (typeof window.shell === "function") {
+        window.shell(
+            "profile.html",
+            "My Profile",
+            "Manage your personal CampusVoice information.",
+            content
+        );
+    } else {
+        document.body.innerHTML =
+            `<main class="content">${content}</main>`;
+    }
+
+    const $ = id => document.getElementById(id);
+
+    let userId = null;
+    let profile = null;
+    let selectedPhoto = null;
+    let originalContact = "";
+
+    function showMessage(message, isError = false) {
+        const box = $("profileMessage");
+        box.textContent = message;
+        box.className = "profile-alert show " +
+            (isError ? "error" : "success");
+    }
+
+    function clearMessage() {
+        const box = $("profileMessage");
+        box.textContent = "";
+        box.className = "profile-alert";
+    }
+
+    function getInitials(data) {
+        const first = (data.first_name || "").trim().charAt(0);
+        const last = (data.last_name || "").trim().charAt(0);
+        return (first + last).toUpperCase() || "CV";
+    }
+
+    function setEditing(editing) {
+        ["contact", "photo", "password", "confirmPassword"]
+            .forEach(id => {
+                $(id).disabled = !editing;
+            });
+
+        ["firstName", "middleInitial", "lastName",
+            "studentId", "email", "role"].forEach(id => {
+            $(id).disabled = true;
+        });
+
+        $("editProfile").hidden = editing;
+        $("saveProfile").hidden = !editing;
+        $("cancelEdit").hidden = !editing;
+    }
+
+    function setAvatar(element, url, data) {
+        element.replaceChildren();
+
+        if (url) {
+            const image = document.createElement("img");
+            image.src = url;
+            image.alt = "Profile picture";
+
+            image.onerror = () => {
+                element.replaceChildren();
+                const fallback = document.createElement("span");
+                fallback.textContent = getInitials(data);
+                element.appendChild(fallback);
+            };
+
+            element.appendChild(image);
+        } else {
+            const fallback = document.createElement("span");
+            fallback.textContent = getInitials(data);
+            element.appendChild(fallback);
+        }
+    }
+
+    function displayProfile(data) {
+        profile = data;
+
+        $("firstName").value = data.first_name || "";
+        $("middleInitial").value = data.middle_initial || "";
+        $("lastName").value = data.last_name || "";
+        $("studentId").value = data.student_id || "";
+        $("email").value = data.email || savedUser?.email || "";
+
+        $("role").value = String(data.role || "student")
+            .replaceAll("_", " ")
+            .replace(/\b\w/g, letter => letter.toUpperCase());
+
+        $("contact").value = data.contact_number || "";
+
+        const name = [
+            data.first_name,
+            data.middle_initial,
+            data.last_name
+        ].filter(Boolean).join(" ");
+
+        $("profileName").textContent = name || "Student Profile";
+        $("profileDescription").textContent =
+            "Student · " + (data.student_id || "ID not assigned");
+
+        setAvatar($("profileAvatar"), data.profile_picture, data);
+
+        if (savedUser) {
+            savedUser.name = name;
+            savedUser.profilePicture = data.profile_picture || "";
+
+            try {
+                localStorage.setItem("campusvoiceUser",
+                    JSON.stringify(savedUser));
+                sessionStorage.setItem("campusvoiceUser",
+                    JSON.stringify(savedUser));
+            } catch (error) {
+                console.warn("Could not update cached user.", error);
+            }
+        }
+
+        const headerName = document.querySelector(".user-menu b");
+        if (headerName) headerName.textContent = name;
+
+        const headerAvatar = document.querySelector(".user-menu .avatar");
+        if (headerAvatar) {
+            setAvatar(headerAvatar, data.profile_picture, data);
+        }
+
+        setEditing(false);
+    }
+
+    async function loadProfile() {
+        if (!sb) {
+            throw new Error(
+                "Supabase client not found. Check supabase-config.js."
+            );
+        }
+
+        const { data: authData, error: authError } =
+            await sb.auth.getUser();
+
+        if (authError) {
+            console.warn("Supabase auth lookup:", authError.message);
+        }
+
+        userId = authData?.user?.id ||
+            savedUser?.userId ||
+            savedUser?.user_id ||
+            null;
+
+        if (!userId) {
+            throw new Error(
+                "Unable to identify your account. Please sign in again."
+            );
+        }
+
+        const { data, error } = await sb
+            .from("users")
+            .select(`
+                user_id,
+                student_id,
+                first_name,
+                middle_initial,
+                last_name,
+                email,
+                role,
+                contact_number,
+                profile_picture
+            `)
+            .eq("user_id", userId)
+            .single();
+
+        if (error || !data) {
+            throw new Error(error?.message ||
+                "Could not load your profile from Supabase.");
+        }
+
+        displayProfile(data);
+        $("editProfile").disabled = false;
+    }
+
+    async function uploadProfilePhoto(file) {
+        if (!file) return profile?.profile_picture || "";
+
+        const extension = file.name.split(".").pop().toLowerCase();
+        const safeExtension = ["jpg", "jpeg", "png", "webp"]
+            .includes(extension) ? extension : "jpg";
+
+        const path = `${userId}/profile.${safeExtension}`;
+
+        const { error: uploadError } = await sb.storage
+            .from(PHOTO_BUCKET)
+            .upload(path, file, {
+                upsert: true,
+                contentType: file.type
+            });
+
+        if (uploadError) {
+            throw new Error("Photo upload failed: " + uploadError.message);
+        }
+
+        const { data } = sb.storage
+            .from(PHOTO_BUCKET)
+            .getPublicUrl(path);
+
+        // Add a version query to refresh the image if the same file is replaced.
+        return data.publicUrl + "?v=" + Date.now();
+    }
+
+    $("editProfile").addEventListener("click", () => {
+        if (!profile) return;
+        originalContact = $("contact").value;
+        clearMessage();
+        setEditing(true);
+        $("contact").focus();
+    });
+
+    $("cancelEdit").addEventListener("click", () => {
+        $("contact").value = originalContact;
+        $("password").value = "";
+        $("confirmPassword").value = "";
+        $("photo").value = "";
+        selectedPhoto = null;
+
+        displayProfile(profile);
+        clearMessage();
+        showMessage("Changes cancelled.");
+    });
+
+    $("photo").addEventListener("change", event => {
+        const file = event.target.files?.[0];
+
+        if (!file) {
+            selectedPhoto = null;
+            return;
+        }
+
+        if (!["image/jpeg", "image/png", "image/webp"]
+            .includes(file.type)) {
+            event.target.value = "";
+            selectedPhoto = null;
+            showMessage("Please choose a JPG, PNG, or WebP image.", true);
+            return;
+        }
+
+        if (file.size > 2 * 1024 * 1024) {
+            event.target.value = "";
+            selectedPhoto = null;
+            showMessage("The image must be 2 MB or smaller.", true);
+            return;
+        }
+
+        selectedPhoto = file;
+        clearMessage();
+    });
+
+    $("profileForm").addEventListener("submit", async event => {
+        event.preventDefault();
+
+        if (!profile || !sb || !userId) return;
+
+        const contact = $("contact").value.trim();
+        const password = $("password").value;
+        const confirmPassword = $("confirmPassword").value;
+
+        if (password && password.length < 8) {
+            showMessage(
+                "The new password must contain at least 8 characters.", true
+            );
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            showMessage(
+                "New Password and Confirm New Password do not match.", true
+            );
+            return;
+        }
+
+        const button = $("saveProfile");
+        button.disabled = true;
+        button.textContent = "Saving...";
+        clearMessage();
+
+        try {
+            const updates = {
+                contact_number: contact || null,
+                updated_at: new Date().toISOString()
+            };
+
+            if (selectedPhoto) {
+                updates.profile_picture =
+                    await uploadProfilePhoto(selectedPhoto);
+            }
+
+            const { data: updatedRows, error } = await sb
+                .from("users")
+                .update(updates)
+                .eq("user_id", userId)
+                .select("user_id");
+
+            if (error) throw error;
+
+            if (!updatedRows || updatedRows.length === 0) {
+                throw new Error(
+                    "No profile was updated. Check your Supabase Row Level Security policies."
+                );
+            }
+
+            if (password) {
+                const { error: passwordError } =
+                    await sb.auth.updateUser({ password });
+
+                if (passwordError) {
+                    $("password").value = "";
+                    $("confirmPassword").value = "";
+                    await loadProfile();
+                    showMessage(
+                        "Profile saved, but password could not be changed: " +
+                        passwordError.message, true
+                    );
+                    return;
+                }
+            }
+
+            $("password").value = "";
+            $("confirmPassword").value = "";
+            $("photo").value = "";
+            selectedPhoto = null;
+
+            await loadProfile();
+            showMessage("Your profile has been saved successfully.");
+
+        } catch (error) {
+            console.error("Profile save error:", error);
+            showMessage(error.message ||
+                "Unable to save profile changes.", true);
+        } finally {
+            button.disabled = false;
+            button.textContent = "Save Changes";
+        }
+    });
+
+    loadProfile().catch(error => {
+        console.error("Profile loading error:", error);
+        showMessage(error.message || "Could not load profile.", true);
+        $("editProfile").disabled = true;
+    });
+})();
+</script>
+</body>
+</html>

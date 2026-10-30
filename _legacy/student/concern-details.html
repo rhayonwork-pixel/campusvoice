@@ -1,0 +1,617 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Concern Details | CampusVoice</title>
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/student.css">
+</head>
+<body>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/shell.js"></script>
+
+<script>
+const supabaseClient = window.campusVoiceSupabase;
+const params = new URLSearchParams(window.location.search);
+const concernId = params.get("id");
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function formatDate(value) {
+    if (!value) return "—";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return escapeHtml(value);
+    }
+
+    return date.toLocaleString("en-PH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+    });
+}
+
+function showError(message) {
+    const content = `
+        <div class="card">
+            <h3 class="card-title">Unable to Load Concern</h3>
+            <p>${escapeHtml(message)}</p>
+            <a class="btn" href="concerns.html">Back to My Concerns</a>
+        </div>
+    `;
+
+    if (typeof shell === "function") {
+        shell(
+            "concern-details.html",
+            "Concern Details",
+            "Review your submitted concern.",
+            content,
+            ""
+        );
+    } else {
+        document.body.innerHTML = content;
+    }
+}
+
+async function loadConcernDetails() {
+    try {
+        if (!supabaseClient) {
+            throw new Error(
+                "Supabase client is unavailable. Please check supabase-config.js."
+            );
+        }
+
+        if (!concernId || !/^\d+$/.test(concernId)) {
+            window.location.href = "concerns.html";
+            return;
+        }
+
+        // Verify the current logged-in student.
+        const {
+            data: { user },
+            error: authError
+        } = await supabaseClient.auth.getUser();
+
+        if (authError) throw authError;
+
+        if (!user) {
+            window.location.href = "../index.html";
+            return;
+        }
+
+        // Load only a concern owned by the current student.
+        const {
+            data: concern,
+            error: concernError
+        } = await supabaseClient
+            .from("concerns")
+            .select(`
+                concern_id,
+                concern_code,
+                student_id,
+                title,
+                description,
+                date_submitted,
+                created_at,
+                updated_at,
+                resolved_at,
+                closed_at,
+                status_id,
+                priority_id,
+                category_id,
+                location_id
+            `)
+            .eq("concern_id", Number(concernId))
+            .eq("student_id", user.id)
+            .maybeSingle();
+
+        if (concernError) throw concernError;
+
+        if (!concern) {
+            showError(
+                "This concern could not be found or does not belong to your account."
+            );
+            return;
+        }
+
+        // Load related information, supporting photos, and staff progress.
+        const [
+            statusResult,
+            categoryResult,
+            locationResult,
+            priorityResult,
+            photoResult,
+            updatesResult
+        ] = await Promise.all([
+            supabaseClient
+                .from("statuses")
+                .select("status_id, status_name")
+                .eq("status_id", concern.status_id)
+                .maybeSingle(),
+
+            supabaseClient
+                .from("categories")
+                .select("category_id, category_name")
+                .eq("category_id", concern.category_id)
+                .maybeSingle(),
+
+            supabaseClient
+                .from("locations")
+                .select("location_id, building, floor, area")
+                .eq("location_id", concern.location_id)
+                .maybeSingle(),
+
+            concern.priority_id == null
+                ? Promise.resolve({
+                    data: null,
+                    error: null
+                })
+                : supabaseClient
+                    .from("priorities")
+                    .select("priority_id, priority_name")
+                    .eq("priority_id", concern.priority_id)
+                    .maybeSingle(),
+
+            supabaseClient
+                .from("photos")
+                .select("photo_id, photo_type, file_path")
+                .eq("concern_id", concern.concern_id)
+                .eq("photo_type", "supporting")
+                .order("photo_id", { ascending: false }),
+
+            supabaseClient
+                .from("concern_updates")
+                .select(`
+                    update_id,
+                    concern_id,
+                    user_id,
+                    status_id,
+                    update_type,
+                    response,
+                    action_taken,
+                    created_at
+                `)
+                .eq("concern_id", concern.concern_id)
+                .order("created_at", { ascending: true })
+        ]);
+
+        for (const result of [
+            statusResult,
+            categoryResult,
+            locationResult,
+            priorityResult,
+            photoResult,
+            updatesResult
+        ]) {
+            if (result.error) throw result.error;
+        }
+
+        const status = statusResult.data?.status_name || "Submitted";
+        const updates = updatesResult.data || [];
+
+        // Find the most recent staff response and action taken.
+        const latestResponseUpdate = [...updates].reverse().find(update =>
+            String(update.response || "").trim()
+        );
+
+        const latestActionUpdate = [...updates].reverse().find(update =>
+            String(update.action_taken || "").trim()
+        );
+
+        // Load names for statuses referenced in the update history.
+        const statusNames = new Map();
+
+        const updateStatusIds = [
+            ...new Set(
+                updates
+                    .map(update => update.status_id)
+                    .filter(id => id != null)
+            )
+        ];
+
+        if (updateStatusIds.length) {
+            const {
+                data: updateStatuses,
+                error: updateStatusesError
+            } = await supabaseClient
+                .from("statuses")
+                .select("status_id, status_name")
+                .in("status_id", updateStatusIds);
+
+            if (updateStatusesError) throw updateStatusesError;
+
+            (updateStatuses || []).forEach(item => {
+                statusNames.set(
+                    String(item.status_id),
+                    item.status_name
+                );
+            });
+        }
+
+        // Load names of users who posted updates.
+        const staffUserIds = [
+            ...new Set(
+                updates
+                    .map(update => update.user_id)
+                    .filter(Boolean)
+            )
+        ];
+
+        const staffNames = new Map();
+
+        if (staffUserIds.length) {
+            const {
+                data: updateUsers,
+                error: updateUsersError
+            } = await supabaseClient
+                .from("users")
+                .select("user_id, first_name, middle_initial, last_name, email")
+                .in("user_id", staffUserIds);
+
+            if (updateUsersError) throw updateUsersError;
+
+            (updateUsers || []).forEach(person => {
+                const name = [
+                    person.first_name,
+                    person.middle_initial,
+                    person.last_name
+                ].filter(Boolean).join(" ");
+
+                staffNames.set(
+                    String(person.user_id),
+                    name || person.email || "Staff"
+                );
+            });
+        }
+
+        const responseMarkup = latestResponseUpdate
+            ? `
+                <b>Staff Update</b>
+                <p style="white-space:pre-wrap">${escapeHtml(latestResponseUpdate.response)}</p>
+                <small>
+                    ${escapeHtml(
+                        staffNames.get(String(latestResponseUpdate.user_id)) || "Staff"
+                    )}
+                    · ${formatDate(latestResponseUpdate.created_at)}
+                </small>
+            `
+            : `
+                <b>Staff Update</b>
+                <p>No staff response has been recorded yet.</p>
+            `;
+
+        const actionMarkup = latestActionUpdate
+            ? `
+                <p style="white-space:pre-wrap">${escapeHtml(latestActionUpdate.action_taken)}</p>
+                <small>${formatDate(latestActionUpdate.created_at)}</small>
+            `
+            : `<p>No action details have been recorded yet.</p>`;
+
+        // Remove exact duplicate updates while preserving chronological order.
+        const uniqueUpdates = [];
+        const seenUpdates = new Set();
+
+        for (const update of updates) {
+            const signature = JSON.stringify([
+                String(update.user_id || ""),
+                String(update.status_id ?? ""),
+                String(update.response || "").trim(),
+                String(update.action_taken || "").trim()
+            ]);
+
+            if (seenUpdates.has(signature)) {
+                continue;
+            }
+
+            seenUpdates.add(signature);
+            uniqueUpdates.push(update);
+        }
+
+        // Render each unique staff update once.
+        
+const groupedUpdates = [];
+
+for (const update of updates) {
+    const statusName =
+        statusNames.get(String(update.status_id)) ||
+        update.update_type ||
+        "Staff Update";
+
+    const previous = groupedUpdates[groupedUpdates.length - 1];
+
+    // Group consecutive updates with the same status.
+    if (
+        previous &&
+        String(previous.status_id) === String(update.status_id)
+    ) {
+        const response = String(update.response || "").trim();
+        const action = String(update.action_taken || "").trim();
+
+        if (response && !previous.responses.includes(response)) {
+            previous.responses.push(response);
+        }
+
+        if (action && !previous.actions.includes(action)) {
+            previous.actions.push(action);
+        }
+
+        previous.lastCreatedAt = update.created_at;
+        previous.lastUserId = update.user_id;
+    } else {
+        groupedUpdates.push({
+            status_id: update.status_id,
+            statusName,
+            responses: update.response
+                ? [String(update.response).trim()]
+                : [],
+            actions: update.action_taken
+                ? [String(update.action_taken).trim()]
+                : [],
+            firstCreatedAt: update.created_at,
+            lastCreatedAt: update.created_at,
+            lastUserId: update.user_id
+        });
+    }
+}
+
+const timelineMarkup = groupedUpdates.length
+    ? groupedUpdates.map(update => `
+        <div class="timeline-row done">
+            <span class="timeline-dot"></span>
+            <div>
+                <b>${escapeHtml(update.statusName)}</b>
+
+                ${update.responses.map(response => `
+                    <p style="white-space:pre-wrap;margin:5px 0">
+                        ${escapeHtml(response)}
+                    </p>
+                `).join("")}
+
+                ${update.actions.map(action => `
+                    <small>Action taken: ${escapeHtml(action)}</small><br>
+                `).join("")}
+
+                <small>
+                    ${escapeHtml(
+                        staffNames.get(String(update.lastUserId)) || "Staff"
+                    )}
+                    · ${formatDate(update.lastCreatedAt)}
+                </small>
+            </div>
+        </div>
+    `).join("")
+    : `
+        <div class="timeline-row">
+            <span class="timeline-dot"></span>
+            <div>
+                <b>No staff updates yet</b>
+                <small>
+                    Progress will appear here after staff saves an update.
+                </small>
+            </div>
+        </div>
+    `;
+
+        const category = categoryResult.data?.category_name || "—";
+        const location = locationResult.data || {};
+        const priority = priorityResult.data?.priority_name || "To be assessed";
+
+        const building = location.building || "—";
+
+        const area = [
+            location.floor,
+            location.area
+        ].filter(Boolean).join(" · ") || "—";
+
+        const submittedDate = formatDate(
+            concern.date_submitted || concern.created_at
+        );
+
+        // Generate a temporary URL for the private Storage image.
+        let photoMarkup = `
+            <div class="photo-box">
+                No supporting photo was attached.
+            </div>
+        `;
+
+        const photos = photoResult.data || [];
+
+        if (photos.length > 0) {
+            const photo = photos[0];
+
+            const {
+                data: signedData,
+                error: signedError
+            } = await supabaseClient.storage
+                .from("concern-photos")
+                .createSignedUrl(photo.file_path, 3600);
+
+            if (signedError) {
+                console.error("Photo URL error:", signedError);
+
+                photoMarkup = `
+                    <div class="photo-box">
+                        The photo record exists, but the image could not
+                        be loaded. Please check Storage permissions.
+                    </div>
+                `;
+            } else if (signedData?.signedUrl) {
+                photoMarkup = `
+                    <a href="${escapeHtml(signedData.signedUrl)}"
+                       target="_blank"
+                       rel="noopener noreferrer">
+                        <img
+                            class="photo-preview"
+                            src="${escapeHtml(signedData.signedUrl)}"
+                            alt="Supporting photo for ${escapeHtml(concern.title)}"
+                            style="display:block;max-width:100%;height:auto;object-fit:contain"
+                        >
+                    </a>
+                `;
+            }
+        }
+
+        const content = `
+            <div class="actions" style="margin-bottom:14px">
+                <a class="btn" href="concerns.html">
+                    ← Back to My Concerns
+                </a>
+            </div>
+
+            <div class="detail-grid">
+                <div>
+                    <div class="card">
+                        <div class="card-head">
+                            <div>
+                                <span class="eyebrow" style="color:#2c5ca8">
+                                    CONCERN RECORD
+                                </span>
+
+                                <h3 class="card-title"
+                                    style="font-size:19px;margin-top:4px">
+                                    ${escapeHtml(concern.title)}
+                                </h3>
+
+                                <div class="card-subtitle">
+                                    ${escapeHtml(
+                                        concern.concern_code || concern.concern_id
+                                    )}
+                                    · Submitted ${submittedDate}
+                                </div>
+                            </div>
+
+                            <div>
+                                ${
+                                    typeof badge === "function"
+                                        ? badge(status)
+                                        : escapeHtml(status)
+                                }
+                            </div>
+                        </div>
+
+                        <div class="info-grid">
+                            <div class="info-box">
+                                <small>CATEGORY</small>
+                                <b>${escapeHtml(category)}</b>
+                            </div>
+
+                            <div class="info-box">
+                                <small>PRIORITY</small>
+                                <b>
+                                    ${
+                                        typeof priority === "function"
+                                            ? priority(
+                                                priorityResult.data?.priority_name
+                                                    || "To be assessed"
+                                            )
+                                            : escapeHtml(priority)
+                                    }
+                                </b>
+                            </div>
+
+                            <div class="info-box">
+                                <small>LOCATION</small>
+                                <b>${escapeHtml(building)}</b>
+                            </div>
+
+                            <div class="info-box">
+                                <small>AREA / ROOM</small>
+                                <b>${escapeHtml(area)}</b>
+                            </div>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3>Description</h3>
+                            <p style="white-space:pre-wrap">${escapeHtml(
+                                concern.description || "No description provided."
+                            )}</p>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3>Latest Staff Response</h3>
+                            <div class="response">
+                                ${responseMarkup}
+                            </div>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3>Action Taken</h3>
+                            ${actionMarkup}
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top:18px">
+                        <div class="card-head">
+                            <div>
+                                <h3 class="card-title">Concern Timeline</h3>
+                                <div class="card-subtitle">
+                                    Staff progress updates and timestamps for this concern.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="timeline">
+                            <div class="timeline-row done">
+                                <span class="timeline-dot"></span>
+                                <div>
+                                    <b>Submitted</b>
+                                    <small>${submittedDate}</small>
+                                </div>
+                            </div>
+
+                            ${timelineMarkup}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="card">
+                        <div class="card-head">
+                            <div>
+                                <h3 class="card-title">Supporting Photo</h3>
+                                <div class="card-subtitle">
+                                    Evidence submitted with the concern
+                                </div>
+                            </div>
+                        </div>
+
+                        ${photoMarkup}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        shell(
+            "concern-details.html",
+            "Concern Details",
+            "Review the status, response, action taken, and history of this concern.",
+            content,
+            ""
+        );
+
+    } catch (error) {
+        console.error("Concern Details loading error:", error);
+        showError(error.message || "An unexpected error occurred.");
+    }
+}
+
+document.addEventListener("DOMContentLoaded", loadConcernDetails);
+</script>
+
+</body>
+</html>

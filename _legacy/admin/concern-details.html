@@ -1,0 +1,812 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Concern Details | CampusVoice</title>
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/admin.css">
+</head>
+<body>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/shell.js"></script>
+
+<script>
+const supabaseClient = window.campusVoiceSupabase;
+const requestedId = new URLSearchParams(location.search).get("id");
+
+function esc(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function dateText(value) {
+    if (!value) return "—";
+
+    const date = new Date(value);
+
+    return Number.isNaN(date.getTime())
+        ? esc(value)
+        : esc(date.toLocaleString("en-PH", {
+            dateStyle: "medium",
+            timeStyle: "short"
+        }));
+}
+
+function statusLabel(statuses, id) {
+    return statuses.find(
+        item => String(item.status_id) === String(id)
+    )?.status_name || "Unknown";
+}
+
+function priorityLabel(priorities, id) {
+    return priorities.find(
+        item => String(item.priority_id) === String(id)
+    )?.priority_name || "—";
+}
+
+function categoryLabel(categories, id) {
+    return categories.find(
+        item => String(item.category_id) === String(id)
+    )?.category_name || "—";
+}
+
+function locationLabel(locations, id) {
+    const item = locations.find(
+        item => String(item.location_id) === String(id)
+    );
+
+    return item
+        ? [item.building, item.floor, item.area]
+            .filter(Boolean).join(" · ")
+        : "—";
+}
+
+function userName(users, id) {
+    const user = users.find(
+        item => String(item.user_id) === String(id)
+    );
+
+    if (!user) return "User";
+
+    return [
+        user.first_name,
+        user.middle_initial,
+        user.last_name
+    ].filter(Boolean).join(" ") || user.email || "User";
+}
+
+function showError(message) {
+    shell(
+        "concerns.html",
+        "Concern Details",
+        "Administrative review of a campus concern.",
+        `
+        <div class="card">
+            <h3 class="card-title">Unable to Load Concern</h3>
+            <p>${esc(message)}</p>
+            <a class="btn" href="concerns.html">Back to All Concerns</a>
+        </div>
+        `,
+        ""
+    );
+}
+
+async function loadConcernDetails() {
+    try {
+        if (!supabaseClient) {
+            throw new Error(
+                "Supabase client not found. Check ../js/supabase-config.js."
+            );
+        }
+
+        if (!requestedId) {
+            throw new Error("No concern ID was provided in the URL.");
+        }
+
+        const { data: authData, error: authError } =
+            await supabaseClient.auth.getUser();
+
+        if (authError) throw authError;
+
+        if (!authData.user) {
+            location.href = "../index.html";
+            return;
+        }
+
+        const { data: profile, error: profileError } =
+            await supabaseClient
+                .from("users")
+                .select("user_id, role, account_status")
+                .eq("user_id", authData.user.id)
+                .single();
+
+        if (profileError) throw profileError;
+
+        if (
+            !["admin", "super_admin"].includes(profile.role) ||
+            profile.account_status !== "active"
+        ) {
+            throw new Error(
+                "An active admin account is required to view this page."
+            );
+        }
+
+        let concernQuery = supabaseClient
+            .from("concerns")
+            .select(`
+                concern_id,
+                concern_code,
+                student_id,
+                category_id,
+                location_id,
+                priority_id,
+                status_id,
+                title,
+                description,
+                date_submitted,
+                created_at,
+                updated_at,
+                resolved_at,
+                closed_at
+            `);
+
+        if (/^\d+$/.test(requestedId)) {
+            concernQuery = concernQuery.eq(
+                "concern_id",
+                Number(requestedId)
+            );
+        } else {
+            concernQuery = concernQuery.eq(
+                "concern_code",
+                requestedId
+            );
+        }
+
+        const { data: concern, error: concernError } =
+            await concernQuery.maybeSingle();
+
+        if (concernError) throw concernError;
+
+        if (!concern) {
+            throw new Error("Concern not found in the database.");
+        }
+
+        const [
+            statusResult,
+            categoryResult,
+            priorityResult,
+            locationResult,
+            studentResult,
+            updatesResult,
+            assignmentsResult,
+            photosResult
+        ] = await Promise.all([
+            supabaseClient.from("statuses")
+                .select("status_id, status_name")
+                .order("status_id"),
+
+            supabaseClient.from("categories")
+                .select("category_id, category_name")
+                .order("category_name"),
+
+            supabaseClient.from("priorities")
+                .select("priority_id, priority_name")
+                .order("priority_id"),
+
+            supabaseClient.from("locations")
+                .select("location_id, building, floor, area")
+                .order("building"),
+
+            supabaseClient.from("users")
+                .select("user_id, student_id, first_name, middle_initial, last_name, email, role")
+                .eq("user_id", concern.student_id)
+                .maybeSingle(),
+
+            supabaseClient.from("concern_updates")
+                .select("update_id, user_id, status_id, update_type, response, action_taken, created_at")
+                .eq("concern_id", concern.concern_id)
+                .order("created_at", { ascending: true }),
+
+            supabaseClient.from("assignments")
+                .select("assignment_id, staff_id, assigned_by, assigned_at, reassigned_at, assignment_status, reason, completed_at")
+                .eq("concern_id", concern.concern_id)
+                .order("assigned_at", { ascending: false }),
+
+            supabaseClient.from("photos")
+                .select("photo_id, uploaded_by, photo_type, file_path, created_at")
+                .eq("concern_id", concern.concern_id)
+                .order("created_at", { ascending: false })
+        ]);
+
+        for (const result of [
+            statusResult,
+            categoryResult,
+            priorityResult,
+            locationResult,
+            studentResult,
+            updatesResult,
+            assignmentsResult,
+            photosResult
+        ]) {
+            if (result.error) throw result.error;
+        }
+
+        const statuses = statusResult.data || [];
+        const categories = categoryResult.data || [];
+        const priorities = priorityResult.data || [];
+        const locations = locationResult.data || [];
+        const student = studentResult.data;
+        const updates = updatesResult.data || [];
+        const assignments = assignmentsResult.data || [];
+        const photos = photosResult.data || [];
+
+        const relatedIds = [...new Set([
+            ...updates.map(item => item.user_id),
+            ...assignments.flatMap(item => [
+                item.staff_id,
+                item.assigned_by
+            ]),
+            ...photos.map(item => item.uploaded_by)
+        ].filter(Boolean))];
+
+        let relatedUsers = [];
+
+        if (relatedIds.length) {
+            const { data, error } = await supabaseClient
+                .from("users")
+                .select("user_id, first_name, middle_initial, last_name, email, role")
+                .in("user_id", relatedIds);
+
+            if (error) throw error;
+
+            relatedUsers = data || [];
+        }
+
+        const activeAssignment = assignments.find(
+            item => item.assignment_status === "active"
+        ) || null;
+
+        const latestResponse = [...updates].reverse().find(
+            item => String(item.response || "").trim()
+        );
+
+        const latestAction = [...updates].reverse().find(
+            item => String(item.action_taken || "").trim()
+        );
+
+        const currentStatus = statusLabel(statuses, concern.status_id);
+        const currentPriority = priorityLabel(priorities, concern.priority_id);
+        const currentCategory = categoryLabel(categories, concern.category_id);
+        const currentLocation = locationLabel(locations, concern.location_id);
+
+        const groupedUpdates = [];
+
+        for (const update of updates) {
+            const key = update.status_id == null
+                ? `type:${update.update_type || "Concern Update"}`
+                : `status:${update.status_id}`;
+
+            let group = groupedUpdates.find(item => item.key === key);
+
+            if (!group) {
+                group = {
+                    key,
+                    label: update.status_id
+                        ? statusLabel(statuses, update.status_id)
+                        : (update.update_type || "Concern Update"),
+                    items: []
+                };
+
+                groupedUpdates.push(group);
+            }
+
+            group.items.push(update);
+        }
+
+        const studentFullName = student
+            ? [
+                student.first_name,
+                student.middle_initial,
+                student.last_name
+            ].filter(Boolean).join(" ")
+            : "Student profile not found";
+
+        let photoMarkup =
+            `<div class="photo-box">No evidence photos recorded.</div>`;
+
+        if (photos.length) {
+            const photoCards = await Promise.all(
+                photos.map(async photo => {
+                    const { data, error } = await supabaseClient.storage
+                        .from("concern-photos")
+                        .createSignedUrl(photo.file_path, 3600);
+
+                    if (error || !data?.signedUrl) {
+                        console.error("Photo loading error:", error);
+
+                        return `
+                            <div class="photo-box">
+                                Photo record found, but the image could not be loaded.
+                            </div>
+                        `;
+                    }
+
+                    return `
+                        <div style="margin-bottom:14px">
+                            <a href="${esc(data.signedUrl)}"
+                               target="_blank"
+                               rel="noopener noreferrer">
+                                <img
+                                    class="photo-preview"
+                                    src="${esc(data.signedUrl)}"
+                                    alt="Concern evidence photo"
+                                    style="max-width:100%;height:auto;object-fit:contain"
+                                >
+                            </a>
+                            <small>
+                                ${esc(photo.photo_type)} ·
+                                ${dateText(photo.created_at)}
+                            </small>
+                        </div>
+                    `;
+                })
+            );
+
+            photoMarkup = photoCards.join("");
+        }
+
+        const content = `
+            <div class="actions" style="margin-bottom:14px">
+                <a class="btn" href="concerns.html">
+                    ← Back to All Concerns
+                </a>
+
+                <a class="btn primary"
+                   href="assignments.html?concern=${encodeURIComponent(concern.concern_id)}">
+                    Assign / Reassign
+                </a>
+            </div>
+
+            <div class="detail-grid">
+                <div>
+                    <div class="card">
+                        <div class="card-head">
+                            <div>
+                                <span class="eyebrow" style="color:#2c5ca8">
+                                    ADMIN CONCERN RECORD
+                                </span>
+
+                                <h3 class="card-title"
+                                    style="font-size:19px;margin-top:4px">
+                                    ${esc(concern.title)}
+                                </h3>
+
+                                <div class="card-subtitle">
+                                    ${esc(concern.concern_code || concern.concern_id)}
+                                    · Submitted
+                                    ${dateText(concern.date_submitted || concern.created_at)}
+                                </div>
+                            </div>
+
+                            <div>
+                                ${typeof badge === "function"
+                                    ? badge(currentStatus)
+                                    : esc(currentStatus)}
+                            </div>
+                        </div>
+
+                        <div class="info-grid">
+                            <div class="info-box">
+                                <small>STUDENT</small>
+                                <b>${esc(studentFullName)}</b>
+                            </div>
+
+                            <div class="info-box">
+                                <small>STUDENT ID</small>
+                                <b>${esc(student?.student_id || "—")}</b>
+                            </div>
+
+                            <div class="info-box">
+                                <small>EMAIL</small>
+                                <b>${esc(student?.email || "—")}</b>
+                            </div>
+
+                            <div class="info-box">
+                                <small>CATEGORY</small>
+                                <b>${esc(currentCategory)}</b>
+                            </div>
+
+                            <div class="info-box">
+                                <small>LOCATION</small>
+                                <b>${esc(currentLocation)}</b>
+                            </div>
+
+                            <div class="info-box">
+                                <small>PRIORITY</small>
+                                <b id="priorityDisplay">${esc(currentPriority)}</b>
+                            </div>
+
+                            <div class="info-box">
+                                <small>ASSIGNED STAFF</small>
+                                <b>${esc(activeAssignment
+                                    ? userName(relatedUsers, activeAssignment.staff_id)
+                                    : "Unassigned")}</b>
+                            </div>
+
+                            <div class="info-box">
+                                <small>STATUS</small>
+                                <b id="statusDisplay">${esc(currentStatus)}</b>
+                            </div>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3>Description</h3>
+                            <p style="white-space:pre-wrap">
+                                ${esc(concern.description || "No description provided.")}
+                            </p>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3>Latest Staff Response</h3>
+                            <div class="response">
+                                <b>${esc(latestResponse
+                                    ? userName(relatedUsers, latestResponse.user_id)
+                                    : "Staff")}</b>
+
+                                <p style="white-space:pre-wrap">
+                                    ${esc(latestResponse?.response || "No response yet.")}
+                                </p>
+
+                                ${latestResponse
+                                    ? `<small>${dateText(latestResponse.created_at)}</small>`
+                                    : ""}
+                            </div>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3>Action Taken</h3>
+                            <p style="white-space:pre-wrap">
+                                ${esc(latestAction?.action_taken || "No action recorded.")}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top:18px">
+                        <div class="card-head">
+                            <div>
+                                <h3 class="card-title">Concern History</h3>
+                                <div class="card-subtitle">
+                                    Status updates recorded in the database.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="timeline">
+                            <div class="timeline-row done">
+                                <span class="timeline-dot"></span>
+                                <div>
+                                    <b>Submitted</b>
+                                    <small>${dateText(concern.date_submitted || concern.created_at)}</small>
+                                </div>
+                            </div>
+
+                            
+
+${(() => {
+    const groups = new Map();
+
+    for (const update of updates) {
+        const key = update.status_id == null
+            ? `type:${update.update_type || "Concern Update"}`
+            : `status:${update.status_id}`;
+
+        if (!groups.has(key)) {
+            groups.set(key, {
+                label: update.status_id
+                    ? statusLabel(statuses, update.status_id)
+                    : (update.update_type || "Concern Update"),
+                items: []
+            });
+        }
+
+        groups.get(key).items.push(update);
+    }
+
+    return [...groups.values()].map(group => `
+        <div class="timeline-row done">
+            <span class="timeline-dot"></span>
+            <div style="min-width:0;flex:1">
+                <b style="font-size:14px">
+                    ${esc(group.label)} (${group.items.length} updates)
+                </b>
+
+                ${group.items.map(update => `
+                    <div style="border-top:1px solid #e5e7eb;padding:5px 0;line-height:1.4">
+                        <small style="display:block;font-size:12px">
+                            Type: ${esc(update.update_type || "Update")}
+                        </small>
+
+                        ${update.response ? `
+<p style="font-size:13px;margin:3px 0;white-space:pre-wrap;line-height:1.4">                                ${esc(update.response)}
+                            </p>
+                        ` : ""}
+
+                        ${update.action_taken ? `
+                            <small style="display:block;font-size:12px">
+                                Action taken: ${esc(update.action_taken)}
+                            </small>
+                        ` : ""}
+
+                        <small style="display:block;font-size:12px;margin-top:5px">
+                            ${esc(userName(relatedUsers, update.user_id))}
+                            · ${dateText(update.created_at)}
+                        </small>
+                    </div>
+                `).join("")}
+            </div>
+        </div>
+    `).join("");
+})()}
+
+
+
+                            <div class="timeline-row">
+                                <span class="timeline-dot"></span>
+                                <div>
+                                    <b>Current Status: ${esc(currentStatus)}</b>
+                                    <small>Last updated ${dateText(concern.updated_at)}</small>
+                                </div>
+                            </div>
+
+                            ${concern.resolved_at ? `
+                                <div class="timeline-row done">
+                                    <span class="timeline-dot"></span>
+                                    <div>
+                                        <b>Resolved</b>
+                                        <small>${dateText(concern.resolved_at)}</small>
+                                    </div>
+                                </div>
+                            ` : ""}
+
+                            ${concern.closed_at ? `
+                                <div class="timeline-row done">
+                                    <span class="timeline-dot"></span>
+                                    <div>
+                                        <b>Closed</b>
+                                        <small>${dateText(concern.closed_at)}</small>
+                                    </div>
+                                </div>
+                            ` : ""}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="card">
+                        <h3 class="card-title">Administrative Actions</h3>
+
+                        <div class="field" style="margin-top:14px">
+                            <label for="prioritySelect">Change Priority</label>
+
+                            <select id="prioritySelect">
+                                ${priorities.map(priority => `
+                                    <option
+                                        value="${esc(priority.priority_id)}"
+                                        ${String(priority.priority_id) === String(concern.priority_id)
+                                            ? "selected"
+                                            : ""}
+                                    >
+                                        ${esc(priority.priority_name)}
+                                    </option>
+                                `).join("")}
+                            </select>
+                        </div>
+
+                        <button class="btn" id="changePriorityBtn"
+                                style="margin-top:10px">
+                            Save Priority
+                        </button>
+
+                        <div class="actions" style="margin-top:14px">
+                            <button class="btn primary" id="verifyResolutionBtn">
+                                Verify Resolution
+                            </button>
+
+                            <button class="btn danger" id="closeConcernBtn">
+                                Close Concern
+                            </button>
+                        </div>
+
+                        <p id="adminActionMessage"
+                           role="status"
+                           style="margin-top:12px"></p>
+                    </div>
+
+                    <div class="card" style="margin-top:18px">
+                        <h3 class="card-title">Evidence Photos</h3>
+                        <div style="margin-top:12px">${photoMarkup}</div>
+                    </div>
+
+                    <div class="card" style="margin-top:18px">
+                        <h3 class="card-title">Assignment History</h3>
+
+                        <div class="list">
+                            ${assignments.length
+                                ? assignments.map(assignment => `
+                                    <div class="list-row">
+                                        <div>
+                                            <b>${esc(userName(relatedUsers, assignment.staff_id))}</b>
+                                            <small>
+                                                ${esc(assignment.assignment_status)}
+                                                · ${dateText(assignment.assigned_at)}
+                                            </small>
+                                            ${assignment.reason
+                                                ? `<small>${esc(assignment.reason)}</small>`
+                                                : ""}
+                                        </div>
+                                    </div>
+                                `).join("")
+                                : `<div class="list-row"><div><b>No assignment records</b></div></div>`
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        shell(
+            "concerns.html",
+            "Concern Details",
+            "Administrative review, assignment, priority, resolution, and closure controls.",
+            content,
+            ""
+        );
+
+        const verifyBtn = document.getElementById("verifyResolutionBtn");
+        const closeBtn = document.getElementById("closeConcernBtn");
+        const priorityBtn = document.getElementById("changePriorityBtn");
+        const prioritySelect = document.getElementById("prioritySelect");
+        const message = document.getElementById("adminActionMessage");
+
+        const terminalStatuses = ["Resolved", "Closed", "Cancelled"];
+
+        if (terminalStatuses.includes(currentStatus)) {
+            verifyBtn.disabled = true;
+        }
+
+        if (["Closed", "Cancelled"].includes(currentStatus)) {
+            closeBtn.disabled = true;
+        }
+
+        async function runAction(buttons, successMessage, callback) {
+            buttons.forEach(button => button.disabled = true);
+            message.textContent = "Saving changes...";
+
+            try {
+                await callback();
+                message.textContent = successMessage;
+                location.reload();
+            } catch (error) {
+                console.error("Admin action failed:", error);
+                message.textContent = "Error: " + error.message;
+                buttons.forEach(button => button.disabled = false);
+            }
+        }
+
+        verifyBtn.addEventListener("click", () => {
+            if (currentStatus === "Resolved") {
+                message.textContent = "This concern is already resolved.";
+                return;
+            }
+
+            if (!confirm(
+                "Confirm that the reported concern has actually been resolved?"
+            )) return;
+
+            runAction(
+                [verifyBtn, closeBtn, priorityBtn],
+                "Resolution verified successfully.",
+                async () => {
+                    const { error } = await supabaseClient.rpc(
+                        "admin_update_concern_status",
+                        {
+                            p_concern_id: concern.concern_id,
+                            p_status_id: 6,
+                            p_action_taken: "Resolution verified by administrator"
+                        }
+                    );
+
+                    if (error) { throw error;
+                }
+                await loadConcern();
+            }
+            );
+        });
+
+        closeBtn.addEventListener("click", () => {
+            if (currentStatus === "Closed") {
+                message.textContent = "This concern is already closed.";
+                return;
+            }
+
+            if (!confirm(
+                "Are you sure you want to officially close this concern?"
+            )) return;
+
+            runAction(
+                [verifyBtn, closeBtn, priorityBtn],
+                "Concern closed successfully.",
+                async () => {
+                    const { error } = await supabaseClient.rpc(
+                        "admin_update_concern_status",
+                        {
+                            p_concern_id: concern.concern_id,
+                            p_status_id: 8,
+                            p_action_taken: "Concern closed by administrator"
+                        }
+                    );
+
+                    if (error) throw error;
+                }
+            );
+        });
+
+        priorityBtn.addEventListener("click", () => {
+            const newPriorityId = prioritySelect.value;
+
+            if (!newPriorityId) {
+                message.textContent = "Please select a priority.";
+                return;
+            }
+
+            if (String(newPriorityId) === String(concern.priority_id)) {
+                message.textContent = "The selected priority is already applied.";
+                return;
+            }
+
+            const selectedPriority = priorities.find(
+                item => String(item.priority_id) === String(newPriorityId)
+            );
+
+            if (!selectedPriority) {
+                message.textContent = "Selected priority was not found.";
+                return;
+            }
+
+            if (!confirm(
+                `Change priority to ${selectedPriority.priority_name}?`
+            )) return;
+
+            runAction(
+                [verifyBtn, closeBtn, priorityBtn],
+                "Priority updated successfully.",
+                async () => {
+                    const { error } = await supabaseClient
+                        .from("concerns")
+                        .update({ priority_id: Number(newPriorityId) })
+                        .eq("concern_id", concern.concern_id);
+
+                    if (error) throw error;
+                }
+            );
+        });
+
+    } catch (error) {
+        console.error("Admin Concern Details error:", error);
+        showError(error.message || "An unexpected error occurred.");
+    }
+}
+
+loadConcernDetails();
+</script>
+
+</body>
+</html>

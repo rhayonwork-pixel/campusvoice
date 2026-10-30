@@ -1,0 +1,713 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Dashboard | CampusVoice</title>
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/admin.css">
+</head>
+<body>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/shell.js"></script>
+
+<script>
+const supabaseClient = window.campusVoiceSupabase;
+
+async function loadDashboard() {
+    if (!supabaseClient) {
+        console.error("CampusVoice Supabase client is unavailable.");
+        return;
+    }
+
+    const [
+        usersResult,
+        concernsResult,
+        assignmentsResult,
+        categoriesResult,
+        statusesResult
+    ] = await Promise.all([
+        supabaseClient
+            .from("users")
+            .select("user_id, role, account_status"),
+
+        supabaseClient
+            .from("concerns")
+            .select(`
+                concern_id,
+                concern_code,
+                title,
+                description,
+                category_id,
+                location_id,
+                priority_id,
+                status_id,
+                date_submitted,
+                created_at
+            `)
+            .order("created_at", { ascending: false }),
+
+        supabaseClient
+            .from("assignments")
+            .select(
+                "assignment_id, concern_id, staff_id, assignment_status"
+            ),
+
+        supabaseClient
+            .from("categories")
+            .select(
+                "category_id, category_name, status"
+            )
+            .eq("status", "active"),
+
+        supabaseClient
+            .from("statuses")
+            .select(
+                "status_id, status_name"
+            )
+    ]);
+
+    if (usersResult.error) {
+        console.error(
+            "Users error:",
+            usersResult.error
+        );
+    }
+
+    if (concernsResult.error) {
+        console.error(
+            "Concerns error:",
+            concernsResult.error
+        );
+    }
+
+    if (assignmentsResult.error) {
+        console.error(
+            "Assignments error:",
+            assignmentsResult.error
+        );
+    }
+
+    if (categoriesResult.error) {
+        console.error(
+            "Categories error:",
+            categoriesResult.error
+        );
+    }
+
+    if (statusesResult.error) {
+        console.error(
+            "Statuses error:",
+            statusesResult.error
+        );
+    }
+
+    const users =
+        usersResult.data || [];
+
+    const concerns =
+        concernsResult.data || [];
+
+    const assignments =
+        assignmentsResult.data || [];
+
+    const categories =
+        categoriesResult.data || [];
+
+    const statuses =
+        statusesResult.data || [];
+
+    const statusMap =
+        new Map(
+            statuses.map(status => [
+                status.status_id,
+                status.status_name
+            ])
+        );
+
+    const categoryMap =
+        new Map(
+            categories.map(category => [
+                category.category_id,
+                category.category_name
+            ])
+        );
+
+    const activeAssignments =
+        new Map();
+
+    assignments.forEach(
+        assignment => {
+            if (
+                assignment.assignment_status ===
+                "active"
+            ) {
+                activeAssignments.set(
+                    assignment.concern_id,
+                    assignment.staff_id
+                );
+            }
+        }
+    );
+
+    const openStatuses = [
+        "Submitted",
+        "Under Review",
+        "Assigned",
+        "In Progress",
+        "Waiting for Resources",
+        "Reopened"
+    ];
+
+    const totalUsers =
+        users.filter(
+            user =>
+                user.account_status ===
+                "active"
+        ).length;
+
+    const totalReports =
+        concerns.length;
+
+    const openConcerns =
+        concerns.filter(
+            concern =>
+                openStatuses.includes(
+                    statusMap.get(
+                        concern.status_id
+                    )
+                )
+        ).length;
+
+    const resolvedConcerns =
+        concerns.filter(
+            concern =>
+                statusMap.get(
+                    concern.status_id
+                ) === "Resolved"
+        ).length;
+
+    const unassignedConcerns =
+        concerns.filter(
+            concern =>
+                !activeAssignments.has(
+                    concern.concern_id
+                )
+        ).length;
+
+    const categoryCounts =
+        categories
+            .map(category => ({
+                name:
+                    category.category_name,
+                count:
+                    concerns.filter(
+                        concern =>
+                            concern.category_id ===
+                            category.category_id
+                    ).length
+            }))
+            .filter(
+                item =>
+                    item.count > 0
+            );
+
+    const recentConcerns =
+        concerns.slice(0, 6);
+
+    const content = `
+        <div class="hero admin-accent">
+            <div class="eyebrow">
+                ADMIN WORKSPACE
+            </div>
+
+            <h2>
+                Monitor and manage the CampusVoice system.
+            </h2>
+
+            <p>
+                Coordinate concerns, users, assignments,
+                categories, locations, reports, and
+                system activity from one administrative
+                workspace.
+            </p>
+        </div>
+
+        <div class="grid g4">
+
+            <div
+                class="card metric"
+                onclick="location.href='users.html'"
+            >
+                <div class="metric-label">
+                    TOTAL USERS
+                </div>
+
+                <div class="metric-value">
+                    ${totalUsers}
+                </div>
+
+                <div class="metric-note">
+                    Active and managed accounts
+                </div>
+            </div>
+
+            <div
+                class="card metric"
+                onclick="location.href='concerns.html'"
+            >
+                <div class="metric-label">
+                    TOTAL REPORTS
+                </div>
+
+                <div class="metric-value">
+                    ${totalReports}
+                </div>
+
+                <div class="metric-note">
+                    All submitted concerns
+                </div>
+            </div>
+
+            <div
+                class="card metric"
+                onclick="location.href='concerns.html?filter=open'"
+            >
+                <div class="metric-label">
+                    OPEN CONCERNS
+                </div>
+
+                <div class="metric-value">
+                    ${openConcerns}
+                </div>
+
+                <div class="metric-note">
+                    Require attention
+                </div>
+            </div>
+
+            <div
+                class="card metric"
+                onclick="location.href='concerns.html?filter=resolved'"
+            >
+                <div class="metric-label">
+                    RESOLVED
+                </div>
+
+                <div class="metric-value">
+                    ${resolvedConcerns}
+                </div>
+
+                <div class="metric-note">
+                    Resolved concerns
+                </div>
+            </div>
+
+        </div>
+
+        <div
+            class="grid g2"
+            style="margin-top:18px"
+        >
+
+            <div class="card attention-card">
+
+                <div class="card-head">
+                    <div>
+                        <h3 class="card-title">
+                            Needs Your Attention
+                        </h3>
+
+                        <div class="card-subtitle">
+                            Items that may need
+                            administrative action.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="list">
+
+                    <div class="list-row">
+
+                        <div>
+                            <b>
+                                Unassigned Concerns
+                            </b>
+
+                            <small>
+                                ${unassignedConcerns}
+                                concern(s) have no
+                                assigned staff.
+                            </small>
+                        </div>
+
+                        <a
+                            class="link"
+                            href="assignments.html?queue=unassigned"
+                        >
+                            Review →
+                        </a>
+
+                    </div>
+
+                    <div class="list-row">
+
+                        <div>
+                            <b>
+                                Open Concerns
+                            </b>
+
+                            <small>
+                                ${openConcerns}
+                                concern(s) currently
+                                require attention.
+                            </small>
+                        </div>
+
+                        <a
+                            class="link"
+                            href="concerns.html?filter=open"
+                        >
+                            Review →
+                        </a>
+
+                    </div>
+
+                    <div class="list-row">
+
+                        <div>
+                            <b>
+                                User Accounts
+                            </b>
+
+                            <small>
+                                ${totalUsers}
+                                active account(s)
+                                are currently
+                                registered.
+                            </small>
+                        </div>
+
+                        <a
+                            class="link"
+                            href="users.html"
+                        >
+                            Manage →
+                        </a>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="card">
+
+                <div class="card-head">
+
+                    <div>
+                        <h3 class="card-title">
+                            System Health
+                        </h3>
+
+                        <div class="card-subtitle">
+                            Current operational
+                            configuration.
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="health">
+                    <span class="health-dot"></span>
+                    Supabase authentication connected
+                </div>
+
+                <div
+                    class="health"
+                    style="margin-top:9px"
+                >
+                    <span class="health-dot"></span>
+                    Database connected
+                </div>
+
+                <div
+                    class="health"
+                    style="margin-top:9px"
+                >
+                    <span class="health-dot"></span>
+                    CampusVoice system active
+                </div>
+
+                <div
+                    class="alert info"
+                    style="margin-top:15px"
+                >
+                    Initial working schedule:
+                    Monday–Friday, 9:00 AM–4:00 PM.
+                </div>
+
+            </div>
+
+        </div>
+
+        <div
+            class="grid g2"
+            style="margin-top:18px"
+        >
+
+            <div class="card">
+
+                <div class="card-head">
+
+                    <div>
+                        <h3 class="card-title">
+                            Concerns by Category
+                        </h3>
+
+                        <div class="card-subtitle">
+                            Current distribution.
+                        </div>
+                    </div>
+
+                    <a
+                        class="link"
+                        href="reports.html"
+                    >
+                        Reports →
+                    </a>
+
+                </div>
+
+                <div class="chart">
+
+                    ${
+                        categoryCounts.length
+                        ? categoryCounts
+                            .map(item => `
+                                <div
+                                    class="bar"
+                                    style="height:${Math.max(
+                                        18,
+                                        item.count * 42
+                                    )}px"
+                                >
+                                    <span>
+                                        ${esc(
+                                            item.name
+                                        )}
+                                    </span>
+                                </div>
+                            `)
+                            .join("")
+                        : `
+                            <div class="empty">
+                                No concern data
+                                available yet.
+                            </div>
+                        `
+                    }
+
+                </div>
+
+            </div>
+
+            <div class="card">
+
+                <div class="card-head">
+
+                    <div>
+                        <h3 class="card-title">
+                            Status Distribution
+                        </h3>
+
+                        <div class="card-subtitle">
+                            Current concern status.
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="list">
+
+                    ${
+                        statuses.length
+                        ? statuses
+                            .map(status => {
+
+                                const count =
+                                    concerns.filter(
+                                        concern =>
+                                            concern.status_id ===
+                                            status.status_id
+                                    ).length;
+
+                                return `
+                                    <div class="list-row">
+
+                                        <div>
+                                            <b>
+                                                ${esc(
+                                                    status.status_name
+                                                )}
+                                            </b>
+                                        </div>
+
+                                        <strong>
+                                            ${count}
+                                        </strong>
+
+                                    </div>
+                                `;
+                            })
+                            .join("")
+                        : `
+                            <div class="empty">
+                                No status data
+                                available yet.
+                            </div>
+                        `
+                    }
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div
+            class="card"
+            style="margin-top:18px"
+        >
+
+            <div class="card-head">
+
+                <div>
+                    <h3 class="card-title">
+                        Recent Concerns
+                    </h3>
+
+                    <div class="card-subtitle">
+                        Latest activity across
+                        the system.
+                    </div>
+                </div>
+
+                <a
+                    class="link"
+                    href="concerns.html"
+                >
+                    View all →
+                </a>
+
+            </div>
+
+            <div class="table-wrap">
+
+                <table class="table">
+
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Concern</th>
+                            <th>Category</th>
+                            <th>Status</th>
+                            <th>Submitted</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        ${
+                            recentConcerns.length
+                            ? recentConcerns
+                                .map(concern => `
+                                    <tr>
+
+                                        <td>
+                                            <a
+                                                class="link"
+                                                href="concern-details.html?id=${concern.concern_id}"
+                                            >
+                                                ${esc(
+                                                    concern.concern_code ||
+                                                    concern.concern_id
+                                                )}
+                                            </a>
+                                        </td>
+
+                                        <td>
+                                            <strong>
+                                                ${esc(
+                                                    concern.title
+                                                )}
+                                            </strong>
+                                        </td>
+
+                                        <td>
+                                            ${esc(
+                                                categoryMap.get(
+                                                    concern.category_id
+                                                ) || "—"
+                                            )}
+                                        </td>
+
+                                        <td>
+                                            ${esc(
+                                                statusMap.get(
+                                                    concern.status_id
+                                                ) || "—"
+                                            )}
+                                        </td>
+
+                                        <td>
+                                            ${
+                                                concern.date_submitted
+                                                ? new Date(
+                                                    concern.date_submitted
+                                                ).toLocaleDateString()
+                                                : "—"
+                                            }
+                                        </td>
+
+                                    </tr>
+                                `)
+                                .join("")
+                            : `
+                                <tr>
+                                    <td colspan="5">
+                                        <div class="empty">
+                                            No concerns
+                                            submitted yet.
+                                        </div>
+                                    </td>
+                                </tr>
+                            `
+                        }
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+    `;
+
+    shell(
+        "dashboard.html",
+        "Dashboard",
+        "System overview, workload, alerts, and management activity.",
+        content,
+        ""
+    );
+}
+
+loadDashboard();
+</script>
+
+</body>
+</html>

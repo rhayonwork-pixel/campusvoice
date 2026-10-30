@@ -1,0 +1,159 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Notifications | CampusVoice</title>
+
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/staff.css">
+</head>
+
+<body>
+    <script src="../js/demo-data.js"></script>
+    <script src="../js/shell.js"></script>
+
+    <script>
+        function render() {
+            const list = CV.notifications.filter(
+                n => n.role === "staff" &&
+                (!n.targetStaffId || n.targetStaffId === cvCurrentUser().id)
+            );
+
+            const noticeList = document.getElementById("noticeList");
+            const markReadButton = document.getElementById("markRead");
+
+            noticeList.innerHTML = list.map(n => {
+                const title = n.title || "Notification";
+                const lowerTitle = title.toLowerCase();
+
+                const iconClass =
+                    lowerTitle.includes("resolved") ||
+                    lowerTitle.includes("closed")
+                        ? "resolved"
+                        : lowerTitle.includes("review") ||
+                          lowerTitle.includes("submitted")
+                            ? "pending"
+                            : "";
+
+                const icon = iconClass === "resolved"
+                    ? "✓"
+                    : iconClass === "pending"
+                        ? "◷"
+                        : "⚒";
+
+                return `
+                    <div
+                        class="notification-item ${n.read ? "" : "unread"}"
+                        data-notification-id="${esc(n.id)}"
+                        data-target="${n.target ? "true" : "false"}"
+                        tabindex="0"
+                        role="button"
+                    >
+                        <div class="notification-icon ${iconClass}">
+                            ${icon}
+                        </div>
+
+                        <div class="notification-content">
+                            <strong>${esc(title)}</strong>
+                            <p>${esc(n.message || "")}</p>
+                        </div>
+
+                        <time class="notification-time">
+                            ${esc(n.time || "")}${n.read ? "" : " · New"}
+                        </time>
+
+                        <span class="notification-arrow" aria-hidden="true">
+                            ${n.target ? "›" : ""}
+                        </span>
+                    </div>
+                `;
+            }).join("") || '<div class="empty">No notifications.</div>';
+
+            markReadButton.disabled = !list.some(n => !n.read);
+
+            noticeList.querySelectorAll(".notification-item").forEach(item => {
+                const openNotification = () => {
+    const notification = CV.notifications.find(
+        n => String(n.id) === String(item.dataset.notificationId)
+    );
+
+    if (!notification) return;
+
+    if (!notification.read) {
+        notification.read = true;
+        cvSave();
+    }
+
+    if (notification.target) {
+        const targetId = String(notification.target);
+
+        // Demo IDs such as CV-2026-0001 are not Supabase IDs.
+        if (!/^\d+$/.test(targetId)) {
+            toast("This notification uses a demo concern ID. Open the concern from My Assignments.");
+            return;
+        }
+
+        window.location.href =
+            `concerns.html?id=${encodeURIComponent(targetId)}`;
+    } else {
+        render();
+    }
+};
+                item.addEventListener("click", openNotification);
+
+                item.addEventListener("keydown", event => {
+                    if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openNotification();
+                    }
+                });
+            });
+        }
+
+        const content = `
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <h3 class="card-title">Notifications</h3>
+                        <div class="card-subtitle">
+                            Assignments, priority changes, reminders, and
+                            reassignments. Click to open the related concern.
+                        </div>
+                    </div>
+
+                    <button class="btn small" id="markRead" type="button">
+                        Mark all as read
+                    </button>
+                </div>
+
+                <div id="noticeList" class="notification-list"></div>
+            </div>
+        `;
+
+        shell(
+            "notifications.html",
+            "Notifications",
+            "Stay informed about work assignments and concern updates.",
+            content,
+            ""
+        );
+
+        document.getElementById("markRead").onclick = () => {
+            CV.notifications
+                .filter(
+                    n => n.role === "staff" &&
+                    (!n.targetStaffId || n.targetStaffId === cvCurrentUser().id)
+                )
+                .forEach(n => n.read = true);
+
+            cvSave();
+            render();
+            toast("All notifications marked as read.");
+        };
+
+        render();
+    </script>
+</body>
+</html>
