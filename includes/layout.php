@@ -16,11 +16,11 @@ function html_head(string $title, array $css = [], string $bodyClass = ''): void
 <link rel="icon" type="image/webp" href="<?= e(url('assets/img/cmu-logo.webp')) ?>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="<?= e(url('assets/css/cv.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('css/cv.css')) ?>">
 <?php foreach ($css as $file): ?>
-<link rel="stylesheet" href="<?= e(url('assets/css/' . $file)) ?>">
+<link rel="stylesheet" href="<?= e(asset('css/' . $file)) ?>">
 <?php endforeach; ?>
-<link rel="stylesheet" href="<?= e(url('assets/css/identity.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('css/identity.css')) ?>">
 </head>
 <body class="<?= e($bodyClass) ?>">
 <?php
@@ -29,9 +29,16 @@ function html_head(string $title, array $css = [], string $bodyClass = ''): void
 function html_foot(array $js = [], array $external = []): void
 {
     foreach ($external as $src) echo '<script src="' . e($src) . '"></script>' . "\n";
-    echo '<script src="' . e(url('assets/js/cv.js')) . '"></script>' . "\n";
-    foreach ($js as $file) echo '<script src="' . e(url('assets/js/' . $file)) . '"></script>' . "\n";
+    echo '<script src="' . e(asset('js/cv.js')) . '"></script>' . "\n";
+    foreach ($js as $file) echo '<script src="' . e(asset('js/' . $file)) . '"></script>' . "\n";
     echo "</body>\n</html>\n";
+}
+
+/** URL of a CSS/JS file with its modified time appended, so browsers always fetch the newest upload. */
+function asset(string $path): string
+{
+    $file = CV_ROOT . '/assets/' . $path;
+    return url('assets/' . $path) . (is_file($file) ? '?v=' . filemtime($file) : '');
 }
 
 /** Left-hand photo panel + right-hand card used by login / signup / reset pages. */
