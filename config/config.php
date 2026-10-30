@@ -19,6 +19,25 @@ $config = [
         'mail_from'      => 'no-reply@campusvoice.local',
         'mail_from_name' => 'CampusVoice',
     ],
+    // PLACEHOLDER — Gmail / SMTP mailing. Not wired yet: includes/mail.php still uses PHP mail().
+    // Gmail needs an "App password" (Google Account > Security > 2-Step Verification > App passwords).
+    // InfinityFree blocks outbound SMTP, so this only works on a host that allows it.
+    'smtp' => [
+        'enabled' => false,
+        'host'    => 'smtp.gmail.com',
+        'port'    => 587,
+        'secure'  => 'tls',
+        'user'    => 'yourcampusvoice@gmail.com',
+        'pass'    => '',                 // the 16-character app password goes in config.local.php, never here
+    ],
+    // PLACEHOLDER — "Continue with Google" sign-in. Not wired yet (needs a Google Cloud OAuth client).
+    'google' => [
+        'enabled'        => false,
+        'client_id'      => '',
+        'client_secret'  => '',          // keep the real value in config.local.php only
+        'redirect_uri'   => '',          // e.g. https://yourdomain/api/google-callback.php
+        'allowed_domain' => 'cityofmalabonuniversity.edu.ph',
+    ],
     'security' => [
         'max_failed_per_email' => 5,    // lock after N failures ...
         'max_failed_per_ip'    => 20,

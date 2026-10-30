@@ -1,12 +1,11 @@
 -- CampusVoice — MySQL / MariaDB schema (InfinityFree compatible)
 -- Import this file first, then seed.sql.
--- On InfinityFree: skip the CREATE DATABASE / USE lines and import into the database you created in the control panel.
+-- Select your database in phpMyAdmin first, then import. (InfinityFree: the one you created in the control panel.
+-- XAMPP: create an empty database called `campusvoice` first.) CREATE DATABASE / USE are intentionally not here,
+-- because InfinityFree does not allow them.
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
-
-CREATE DATABASE IF NOT EXISTS campusvoice CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE campusvoice;
 
 DROP TABLE IF EXISTS events, feedback, notifications, photos, concern_updates, assignments, concerns,
   working_hours, settings, audit_logs, password_resets, login_attempts,

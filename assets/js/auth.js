@@ -11,6 +11,10 @@
     fail: () => { reenable('#loginForm button[type=submit]', 'Sign in')(); const p = CV.$('#password'); p.value = ''; p.focus(); }
   });
 
+  // PLACEHOLDER: Google sign-in is not connected yet.
+  const googleBtn = CV.$('#googleBtn');
+  if (googleBtn) googleBtn.addEventListener('click', () => CV.toast('Google sign-in is coming soon. Please use your university email for now.', 'ok'));
+
   CV.bindForm(CV.$('#signupForm'), {
     url: 'api/auth.php', action: 'signup', busy: 'Creating account…', delay: 900, keepDisabled: true,
     validate: mismatch, fail: reenable('#signupForm button[type=submit]', 'Create account')

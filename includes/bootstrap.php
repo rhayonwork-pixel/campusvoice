@@ -82,7 +82,11 @@ function db(): PDO
             $pdo->exec("SET time_zone = '+08:00'");
         } catch (PDOException $ex) {
             error_log('CampusVoice DB: ' . $ex->getMessage());
-            fail_hard(503, 'The service is temporarily unavailable. Please try again shortly.');
+            $hint = is_file(CV_ROOT . '/config/config.local.php')
+                ? 'The service is temporarily unavailable. Please try again shortly.'
+                : 'The database is not configured yet: create config/config.local.php from config.local.sample.php.';
+            // debug mode shows the real reason (set debug back to false once the site works)
+            fail_hard(503, cfg('app.debug') ? 'Database connection failed: ' . $ex->getMessage() : $hint);
         }
     }
     return $pdo;

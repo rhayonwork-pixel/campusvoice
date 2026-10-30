@@ -22,8 +22,8 @@ All demo accounts share one password: `CampusVoice#2026` — **change it before 
 ## Deploy to InfinityFree
 
 1. **Control panel → MySQL Databases** → create a database. Note the *hostname, database name, username* (they look like `sql123.infinityfree.com`, `if0_12345678_campusvoice`).
-2. **phpMyAdmin** → select that database → Import `database/schema.sql` **after deleting its first lines** `CREATE DATABASE …` and `USE campusvoice;` → then import `database/seed.sql`.
-3. Copy `config/config.local.sample.php` to `config/config.local.php` and fill in the host, db name, user, password. Set `'debug' => false`.
+2. **phpMyAdmin** → click your database in the left list first → Import `database/schema.sql`, then `database/seed.sql` (the schema no longer contains `CREATE DATABASE`/`USE`, which InfinityFree rejects).
+3. Fill in `config/config.local.php` (host, db name, user, password) and **upload it by hand into the server's `config/` folder** — it is git-ignored, so a Git-based upload never carries it. If the site shows “The service is temporarily unavailable”, this file is missing or its values are wrong; with `'debug' => true` the page shows the exact database error. Set `'debug' => false` when it works.
 4. Upload everything inside `htdocs/` via the File Manager or FTP (`index.php`, `login.php`, `assets/`, `api/`, `includes/`, `config/`, `uploads/`, `admin/`, `staff/`, `student/`, `.htaccess`, …). **Do not upload `_legacy/` or `database/`** once the import is done.
 5. Make sure `uploads/` is writable (it normally is). Its `.htaccess` blocks direct access; photos are served only through `file.php` after a permission check.
 6. Visit your site, sign in as admin, and change every demo password.
