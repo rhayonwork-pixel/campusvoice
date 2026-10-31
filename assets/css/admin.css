@@ -57,3 +57,12 @@
 .hours-row { display: grid; grid-template-columns: 110px 28px minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: center; padding: 6px 0; }
 .hours-row .input { padding: .45rem .6rem; }
 .temp-pw { font-family: ui-monospace, Consolas, monospace; font-size: 1.15rem; letter-spacing: .06em; padding: 10px 14px; background: #f3f7ff; border: 1px dashed var(--navy-2); border-radius: 8px; display: block; text-align: center; user-select: all; }
+
+/* calendar toolbar: even, aligned buttons with text arrows */
+.fc .fc-toolbar { gap: 16px; margin-bottom: 24px !important; }
+.fc .fc-toolbar-chunk { display: flex; align-items: center; gap: 8px; }
+.fc .fc-button { min-height: 36px; padding: 0 16px; line-height: 1; }
+.fc .fc-prev-button, .fc .fc-next-button { min-width: 44px; padding: 0 12px 4px; font-size: 1.9rem; font-weight: 400; }
+.fc .fc-button-group { gap: 0; }
+.fc .fc-today-button:disabled { opacity: .5; }
+.cal-legend { padding-bottom: 8px; }

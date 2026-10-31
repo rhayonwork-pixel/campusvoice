@@ -29,6 +29,10 @@
       initialView: window.innerWidth < 700 ? 'listMonth' : 'dayGridMonth',
       height: 'auto', firstDay: 0, nowIndicator: true, dayMaxEvents: 3, navLinks: true,
       headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listMonth' },
+      // text arrows instead of FullCalendar's embedded icon font (our CSP blocks data: fonts, which left empty boxes)
+      buttonIcons: false,
+      buttonText: { prev: '\u2039', next: '\u203A', today: 'Today', month: 'Month', week: 'Week', list: 'List' },
+      buttonHints: { prev: 'Previous $0', next: 'Next $0', today: 'Go to today' },
       events: (info, ok, fail) => CV.get(S, { action: 'calendar', start: info.startStr, end: info.endStr }).then((r) => ok(r.events)).catch((e) => { CV.toast(e.message, 'error'); fail(e); }),
       eventClick: (i) => {
         const p = i.event.extendedProps;
