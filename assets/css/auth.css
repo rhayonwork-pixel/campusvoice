@@ -37,6 +37,6 @@ body.authpage { background: var(--cream); }
 .google-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: .7rem; padding: .7rem 1rem; border: 1px solid #cfd7e4; border-radius: 8px; background: #fff; color: #3c4043; font-weight: 600; font-size: .95rem; transition: background .2s, border-color .2s; }
 .google-btn svg { width: 20px; height: 20px; flex: none; }
 .google-btn:hover { background: #f8f9fb; border-color: #aab4c5; }
-.google-btn em { font-style: normal; font-size: .6rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #a8761a; border: 1px solid currentColor; border-radius: 3px; padding: 0 5px; }
+.google-btn em { font-style: normal; font-size: .6rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--gold-ink); border: 1px solid currentColor; border-radius: 3px; padding: 0 5px; }
 .google-btn[aria-disabled="true"] { cursor: not-allowed; }
 

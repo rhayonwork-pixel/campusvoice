@@ -11,12 +11,12 @@ body.panel { background: var(--bg); --sw: 264px; --gap: 1.25rem; --pad: 1.5rem; 
 .sb-brand img { flex: none; }
 .sb-brand .lbl { display: flex; flex-direction: column; line-height: 1.1; color: var(--navy); min-width: 0; }
 .sb-brand b { font-family: var(--serif); font-size: 1.15rem; }
-.sb-brand small { font-size: .66rem; letter-spacing: .14em; text-transform: uppercase; color: #a8761a; }
+.sb-brand small { font-size: .66rem; letter-spacing: .14em; text-transform: uppercase; color: var(--gold-ink); }
 .sb-toggle { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; border: 1px solid #d9cfb3; background: transparent; color: var(--navy); transition: transform .28s var(--ease), background .2s; }
 .sb-toggle .ic { width: 18px; height: 18px; }
 .sb-toggle:hover { background: #f1e8d0; }
 /* index-style section label with a hairline, like a directory page */
-.sb-label { display: flex; align-items: center; gap: 10px; padding: 0 14px; margin: 2px 0 8px; font-size: .66rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: #a8761a; }
+.sb-label { display: flex; align-items: center; gap: 10px; padding: 0 14px; margin: 2px 0 8px; font-size: .66rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--gold-ink); }
 .sb-label::after { content: ''; flex: 1; height: 1px; background: #e3d9bf; }
 .sb-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .nav-i { position: relative; display: flex; align-items: center; gap: 14px; height: 44px; padding: 0 14px; border-radius: 0; border: 0; background: none; color: #3b4b68; font-weight: 500; font-size: .94rem; text-align: left; width: 100%; white-space: nowrap; transition: background .2s, color .2s; }
@@ -24,7 +24,7 @@ body.panel { background: var(--bg); --sw: 264px; --gap: 1.25rem; --pad: 1.5rem; 
 .nav-i:hover { color: var(--navy); background: rgba(15, 42, 94, .05); }
 /* active page: bold text and a speech-tail notch cut into the sidebar edge (the CampusVoice motif) — no highlight box */
 .nav-i.on { color: var(--navy); font-weight: 700; }
-.nav-i.on .ic { color: #a8761a; }
+.nav-i.on .ic { color: var(--gold-ink); }
 .nav-i.on::before { content: ''; position: absolute; right: -23px; top: 50%; transform: translateY(-50%); border: 9px solid transparent; border-right: 0; border-left: 10px solid var(--gold); }
 .nav-i.on .lbl { text-decoration: underline; text-decoration-color: var(--gold); text-decoration-thickness: 2px; text-underline-offset: 6px; }
 .nav-i .lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; transition: opacity .2s; }

@@ -1,0 +1,21 @@
+/* Print layout (loaded with media="print"): used by Reports -> Print report, and any Ctrl+P. */
+@page { size: A4; margin: 14mm; }
+* { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body, body.panel { background: #fff !important; color: #111; }
+.sidebar, .topbar, .scrim, .page-head, .page-actions, .rep-bar, .toasts, .lightbox, .modal, .nav, .no-print, .pager, .btn { display: none !important; }
+.shell { display: block !important; }
+.main { min-height: 0; }
+.page { padding: 0 !important; max-width: none; gap: 12px !important; }
+.print-head { display: flex !important; align-items: center; gap: 16px; padding-bottom: 12px; border-bottom: 1.5px solid #0f2a5e; }
+.print-head img { height: 56px; width: auto; }
+.print-head h1 { font-family: 'Playfair Display', Georgia, serif; font-size: 20pt; color: #0f2a5e; margin: 0; }
+.print-head p { margin: 2px 0 0; font-size: 9.5pt; color: #444; }
+.card, .stat-grid, .rep-grid > .card { break-inside: avoid; box-shadow: none !important; }
+.card { height: auto !important; border: 1px solid #cfd5e0; }
+.rep-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; }
+.stat-grid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+.stat-card b { font-size: 18pt; }
+.tbl th { background: #eef1f6 !important; }
+.tbl td, .tbl th { padding: 6px 10px !important; }
+.bar { background: #e3e8f0 !important; } .bar i { background: #173d7a !important; }
+a { color: inherit; text-decoration: none; }

@@ -53,19 +53,36 @@
 
   /* ---------- reports ---------- */
   if (CV.$('#rTotal')) {
+    const sel = CV.$('#range'), from = CV.$('#from'), to = CV.$('#to'), apply = CV.$('#applyRange');
+    const iso = (d) => d.toISOString().slice(0, 10);
+    to.value = iso(new Date()); from.value = iso(new Date(Date.now() - 29 * 864e5)); to.max = to.value;
+    const params = () => (sel.value === 'custom' ? { from: from.value, to: to.value } : { days: sel.value });
     const bars = (el, rows) => {
       const max = Math.max(1, ...rows.map((r) => +r.n));
       el.innerHTML = rows.length ? rows.map((r) => '<div class="bar-row"><span title="' + E(r.label) + '">' + E(r.label) + '</span><div class="bar"><i style="width:' + (+r.n / max * 100) + '%"></i></div><b>' + r.n + '</b></div>').join('') : '<div class="empty">No data for this period.</div>';
     };
     async function load() {
       try {
-        const r = await CV.get(S, { action: 'reports', days: CV.$('#range').value }), s = r.summary, total = +s.total || 0;
+        const r = await CV.get(S, Object.assign({ action: 'reports' }, params())), s = r.summary, total = +s.total || 0;
+        CV.$('#periodLabel').textContent = r.label; CV.$('#printPeriod').textContent = r.label;
+        CV.$('#csvBtn').href = CV.url('api/admin_system.php?' + new URLSearchParams(Object.assign({ action: 'export' }, params())).toString());
         CV.$('#rTotal').textContent = total; CV.$('#rRate').textContent = total ? Math.round((+s.resolved || 0) / total * 100) + '%' : '—';
         CV.$('#rHours').textContent = s.avg_hours != null ? s.avg_hours : '—'; CV.$('#rRating').textContent = r.rating.avg_rating != null ? r.rating.avg_rating + ' / 5' : '—'; CV.$('#rAnon').textContent = +s.anonymous || 0;
         bars(CV.$('#bCat'), r.by_category); bars(CV.$('#bSev'), r.by_severity); bars(CV.$('#bStatus'), r.by_status); bars(CV.$('#bLoc'), r.by_location);
         CV.$('tbody', CV.$('#staffRep')).innerHTML = r.staff.length ? r.staff.map((x) => '<tr><td class="cell-title">' + E(x.label) + '</td><td class="nw">' + x.n + '</td><td class="nw">' + (x.avg_hours != null ? x.avg_hours : '—') + '</td></tr>').join('') : '<tr><td colspan="3"><div class="empty">No completed assignments in this period.</div></td></tr>';
       } catch (e) { CV.toast(e.message, 'error'); }
     }
-    CV.$('#range').addEventListener('change', load); load();
+    sel.addEventListener('change', () => {
+      const custom = sel.value === 'custom';
+      CV.$('#fromWrap').hidden = CV.$('#toWrap').hidden = apply.hidden = !custom;
+      if (!custom) load();
+    });
+    apply.addEventListener('click', () => {
+      if (!from.value || !to.value) return CV.toast('Choose both dates.', 'error');
+      if (from.value > to.value) return CV.toast('The start date must be before the end date.', 'error');
+      load();
+    });
+    CV.$('#printBtn').addEventListener('click', () => window.print());
+    load();
   }
 })();

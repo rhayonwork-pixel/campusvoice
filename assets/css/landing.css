@@ -56,7 +56,7 @@ body.landing { background: var(--cream); }
 .section { padding: clamp(3.5rem, 8vw, 6rem) 0; }
 .section.alt { background: #fff; border-block: 1px solid #efe7d5; }
 .section-head { margin-bottom: 2.6rem; max-width: 640px; }
-.kicker { display: inline-block; font-size: .74rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: #a8761a; margin-bottom: .6rem; }
+.kicker { display: inline-block; font-size: .74rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--gold-ink); margin-bottom: .6rem; }
 .section-head h2 { font-family: var(--serif); font-size: clamp(1.8rem, 3.6vw, 2.7rem); color: var(--navy); }
 
 .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem; }

@@ -72,7 +72,7 @@ function panel_open(array $user, string $title, string $active, array $css = [])
   <div class="main">
     <header class="topbar">
       <button class="icon-btn mobile-only" id="menuBtn" type="button" aria-label="Open menu"><?= icon('menu') ?></button>
-      <h2 class="tb-title"><?= e($title) ?></h2>
+      <div class="tb-title"><b><?= e(['student' => 'Student portal', 'staff' => 'Staff portal', 'admin' => 'Admin portal'][$role]) ?></b><small><?= e(date('l, F j')) ?></small></div>
       <div class="tb-right">
         <div class="bell-wrap">
           <button class="icon-btn" id="bellBtn" type="button" aria-label="Notifications" aria-haspopup="true" aria-expanded="false"><?= icon('bell') ?><span class="dot" id="bellDot" hidden>0</span></button>

@@ -8,6 +8,19 @@ $reads = ['activity', 'calendar', 'reports', 'export', 'settings'];
 $u = api_guard(['admin'], !in_array($action, $reads, true));
 $uid = (int)$u['user_id'];
 
+/** Report period: ?from=YYYY-MM-DD&to=YYYY-MM-DD, or ?days=N (0 = all time). Returns [from, to, label]. */
+function report_range(): array
+{
+    $from = input('from'); $to = input('to');
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $to) && $from <= $to) {
+        return [$from . ' 00:00:00', $to . ' 23:59:59', date('M j, Y', strtotime($from)) . ' – ' . date('M j, Y', strtotime($to))];
+    }
+    $days = input_int('days', 30);
+    if ($days <= 0) return ['1970-01-01 00:00:00', '2999-12-31 23:59:59', 'All time'];
+    $days = min($days, 3650);
+    return [date('Y-m-d 00:00:00', strtotime("-{$days} days")), date('Y-m-d 23:59:59'), 'Last ' . $days . ' days'];
+}
+
 switch ($action) {
 
     /* ---------- audit trail ---------- */
@@ -79,31 +92,32 @@ switch ($action) {
 
     /* ---------- reports ---------- */
     case 'reports': {
-        $days = in_array(input_int('days', 30), [7, 30, 90, 365], true) ? input_int('days', 30) : 30;
-        $since = date('Y-m-d H:i:s', strtotime("-{$days} days"));
+        [$from, $to, $label] = report_range();
         $sum = q("SELECT COUNT(*) total, SUM(status IN ('Resolved','Closed')) resolved, SUM(is_anonymous = 1) anonymous,
                          SUM(due_at < NOW() AND status NOT IN " . CV_OPEN_STATUSES . ") overdue,
                          ROUND(AVG(CASE WHEN resolved_at IS NOT NULL THEN TIMESTAMPDIFF(HOUR, created_at, resolved_at) END), 1) avg_hours
-                  FROM concerns WHERE created_at >= ?", [$since])->fetch();
-        $byCat = q('SELECT cat.category_name label, COUNT(*) n FROM concerns c JOIN categories cat ON cat.category_id = c.category_id WHERE c.created_at >= ? GROUP BY cat.category_id ORDER BY n DESC', [$since])->fetchAll();
-        $bySev = q('SELECT severity label, COUNT(*) n FROM concerns WHERE created_at >= ? GROUP BY severity ORDER BY FIELD(severity,"Urgent","Major","Minor")', [$since])->fetchAll();
-        $byStatus = q('SELECT status label, COUNT(*) n FROM concerns WHERE created_at >= ? GROUP BY status ORDER BY n DESC', [$since])->fetchAll();
-        $byLoc = q("SELECT CONCAT(l.building, ' · ', l.area) label, COUNT(*) n FROM concerns c JOIN locations l ON l.location_id = c.location_id WHERE c.created_at >= ? GROUP BY l.location_id ORDER BY n DESC LIMIT 6", [$since])->fetchAll();
-        $rating = q('SELECT ROUND(AVG(f.rating), 2) avg_rating, COUNT(*) n FROM feedback f JOIN concerns c ON c.concern_id = f.concern_id WHERE c.created_at >= ?', [$since])->fetch();
+                  FROM concerns WHERE created_at BETWEEN ? AND ?", [$from, $to])->fetch();
+        $byCat = q('SELECT cat.category_name label, COUNT(*) n FROM concerns c JOIN categories cat ON cat.category_id = c.category_id WHERE c.created_at BETWEEN ? AND ? GROUP BY cat.category_id ORDER BY n DESC', [$from, $to])->fetchAll();
+        $bySev = q('SELECT severity label, COUNT(*) n FROM concerns WHERE created_at BETWEEN ? AND ? GROUP BY severity ORDER BY FIELD(severity,"Urgent","Major","Minor")', [$from, $to])->fetchAll();
+        $byStatus = q('SELECT status label, COUNT(*) n FROM concerns WHERE created_at BETWEEN ? AND ? GROUP BY status ORDER BY n DESC', [$from, $to])->fetchAll();
+        $byLoc = q("SELECT CONCAT(l.building, ' · ', l.area) label, COUNT(*) n FROM concerns c JOIN locations l ON l.location_id = c.location_id WHERE c.created_at BETWEEN ? AND ? GROUP BY l.location_id ORDER BY n DESC LIMIT 6", [$from, $to])->fetchAll();
+        $rating = q('SELECT ROUND(AVG(f.rating), 2) avg_rating, COUNT(*) n FROM feedback f JOIN concerns c ON c.concern_id = f.concern_id WHERE c.created_at BETWEEN ? AND ?', [$from, $to])->fetch();
         $staff = q("SELECT CONCAT(u.first_name,' ',u.last_name) label, COUNT(*) n, ROUND(AVG(TIMESTAMPDIFF(HOUR, a.assigned_at, a.completed_at)), 1) avg_hours
-                    FROM assignments a JOIN users u ON u.user_id = a.staff_id WHERE a.assignment_status = 'completed' AND a.completed_at >= ? GROUP BY u.user_id ORDER BY n DESC LIMIT 8", [$since])->fetchAll();
-        json_out(['ok' => true, 'days' => $days, 'summary' => $sum, 'by_category' => $byCat, 'by_severity' => $bySev, 'by_status' => $byStatus, 'by_location' => $byLoc, 'rating' => $rating, 'staff' => $staff]);
+                    FROM assignments a JOIN users u ON u.user_id = a.staff_id WHERE a.assignment_status = 'completed' AND a.completed_at BETWEEN ? AND ? GROUP BY u.user_id ORDER BY n DESC LIMIT 8", [$from, $to])->fetchAll();
+        json_out(['ok' => true, 'label' => $label, 'from' => substr($from, 0, 10), 'to' => substr($to, 0, 10), 'summary' => $sum, 'by_category' => $byCat, 'by_severity' => $bySev, 'by_status' => $byStatus, 'by_location' => $byLoc, 'rating' => $rating, 'staff' => $staff]);
     }
 
     case 'export': {
-        // CSV download; anonymous reporters stay masked.
-        audit('report_exported', 'Exported concerns CSV');
+        // CSV download for the chosen period; anonymous reporters stay masked.
+        [$from, $to, $label] = report_range();
+        audit('report_exported', 'Exported concerns CSV (' . $label . ')');
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="campusvoice-concerns-' . date('Ymd') . '.csv"');
         $out = fopen('php://output', 'w');
         fwrite($out, "\xEF\xBB\xBF");
         fputcsv($out, ['Code', 'Title', 'Category', 'Location', 'Severity', 'Status', 'Reporter', 'Course/Year/Section', 'Submitted', 'Due', 'Resolved']);
-        $st = db()->query('SELECT ' . concern_columns() . ', ' . reporter_columns() . ' ' . concern_joins() . ' ORDER BY c.created_at DESC');
+        $st = db()->prepare('SELECT ' . concern_columns() . ', ' . reporter_columns() . ' ' . concern_joins() . ' WHERE c.created_at BETWEEN ? AND ? ORDER BY c.created_at DESC');
+        $st->execute([$from, $to]);
         while ($r = $st->fetch()) {
             $clean = static fn($v) => is_string($v) && preg_match('/^[=+\-@]/', $v) ? "'" . $v : $v;   // CSV-injection guard
             fputcsv($out, array_map($clean, [$r['concern_code'], $r['title'], $r['category_name'], $r['location'], $r['severity'], $r['status'], $r['reporter_name'], reporter_context($r), $r['created_at'], $r['due_at'], $r['resolved_at']]));

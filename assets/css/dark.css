@@ -17,6 +17,7 @@ html[data-theme="dark"] {
   --bad: #ff7b72;  --bad-bg: #3a1514;
   --info: #7fb0ff; --info-bg: #112a4f;
   --shadow-lg: 0 24px 60px rgba(0, 0, 0, .55);
+  --gold-ink: #e0b552;
 }
 html[data-theme="dark"] body { background: var(--bg); color: var(--ink); }
 
@@ -99,3 +100,12 @@ html[data-theme="dark"] body { background: var(--bg); color: var(--ink); }
   --fc-today-bg-color: #2a2310; --fc-list-event-hover-bg-color: #192741; --fc-button-bg-color: #2b5cb8; --fc-button-border-color: #2b5cb8;
   --fc-button-hover-bg-color: #3a6fd0; --fc-button-hover-border-color: #3a6fd0; --fc-button-active-bg-color: #1f4a9a; --fc-button-active-border-color: #1f4a9a; color: var(--ink); }
 [data-theme="dark"] .fc .fc-col-header-cell-cushion, [data-theme="dark"] .fc a { color: var(--ink); }
+
+/* scrollbars (dark) */
+html[data-theme="dark"] { --sb-thumb: rgba(169, 195, 245, .26); --sb-thumb-hover: rgba(169, 195, 245, .5); }
+
+/* spots found by the dark-mode scan */
+[data-theme="dark"] .pager button { background: var(--card); color: var(--ink); border-color: var(--line); }
+[data-theme="dark"] .pager button[disabled] { opacity: .4; }
+[data-theme="dark"] .unread-row td { background: #1b2742; }
+[data-theme="dark"] .tbl td, [data-theme="dark"] .tbl th { border-color: var(--line); }

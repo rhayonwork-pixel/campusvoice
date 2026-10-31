@@ -23,7 +23,7 @@
 
 /* ---------- notes: a marginal note between two rules ---------- */
 .note { background: none !important; color: var(--ink); border-radius: 0; padding: 12px 0; border-top: 1px solid #d9cfb3; border-bottom: 1px solid #d9cfb3; }
-.note .ic { color: #a8761a; }
+.note .ic { color: var(--gold-ink); }
 .note.warn .ic { color: var(--bad); }
 .anon-box { background: none; border: 0; border-top: 1px dashed #b9b3e6; border-bottom: 1px dashed #b9b3e6; border-radius: 0; padding: 12px 0; }
 

@@ -22,6 +22,10 @@
   if (media) { if (media.addEventListener) media.addEventListener('change', apply); else if (media.addListener) media.addListener(apply); }
   document.addEventListener('DOMContentLoaded', apply);
 
+  // printed pages are always light, whatever theme is on screen
+  window.addEventListener('beforeprint', function () { document.documentElement.setAttribute('data-theme', 'light'); });
+  window.addEventListener('afterprint', apply);
+
   window.cvTheme = {
     get: saved,
     set: function (v) { try { localStorage.setItem(KEY, v); } catch (e) { /* private mode: still applies for this page */ } apply(); }

@@ -74,16 +74,17 @@ function render_settings_page(array $u, string $extraHtml = '', array $extraJs =
     <?php endif; ?>
 
 <section class="grid-eq" id="settingsGrid">
+  <div class="col-stack">
   <div class="card">
     <div class="card-head"><h3>Profile</h3></div>
     <form class="card-pad" id="profileForm" novalidate>
       <div class="form-msg" role="alert"></div>
-      <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
-        <span class="avatar" style="width:64px;height:64px;font-size:1.5rem"><?php if ($u['avatar']): ?><img src="<?= e(url('file.php?avatar=' . (int)$u['user_id'] . '&v=' . urlencode((string)$u['updated_at']))) ?>" alt=""><?php else: echo e(strtoupper(mb_substr($u['first_name'], 0, 1))); endif; ?></span>
+      <div class="avatar-row">
+        <span class="avatar lg"><?php if ($u['avatar']): ?><img src="<?= e(url('file.php?avatar=' . (int)$u['user_id'] . '&v=' . urlencode((string)$u['updated_at']))) ?>" alt=""><?php else: echo e(strtoupper(mb_substr($u['first_name'], 0, 1))); endif; ?></span>
         <div class="toolbar"><label class="btn btn-ghost btn-sm" style="cursor:pointer"><?= icon('camera') ?> Change photo<input type="file" id="avatarIn" accept="image/jpeg,image/png,image/webp" hidden></label>
           <?php if ($u['avatar']): ?><button type="button" class="btn btn-ghost btn-sm" id="avatarDel"><?= icon('trash') ?> Remove</button><?php endif; ?></div>
       </div>
-      <div class="row two">
+      <div class="row">
         <div class="field"><label>ID</label><input class="input" value="<?= e($u['school_id']) ?>" disabled></div>
         <div class="field"><label>Email</label><input class="input" value="<?= e($u['email']) ?>" disabled></div>
       </div>
@@ -106,7 +107,21 @@ function render_settings_page(array $u, string $extraHtml = '', array $extraJs =
     </form>
   </div>
 
-  <div style="display:flex;flex-direction:column;gap:var(--gap)">
+    <div class="card">
+      <div class="card-head"><h3>Preferences</h3></div>
+      <form class="card-pad" id="prefForm">
+        <div class="form-msg" role="alert"></div>
+        <label class="check"><input type="checkbox" name="pref_notify_inapp" value="1" <?= $u['pref_notify_inapp'] ? 'checked' : '' ?>><span><b>In-app notifications</b><br><small class="cell-sub">Show updates in the bell and Notifications page.</small></span></label>
+        <label class="check"><input type="checkbox" name="pref_notify_email" value="1" <?= $u['pref_notify_email'] ? 'checked' : '' ?>><span><b>Email me important updates</b><br><small class="cell-sub">Password resets and urgent notices (when email is available).</small></span></label>
+<?php if ($role === 'student'): ?>
+        <label class="check"><input type="checkbox" name="pref_default_anonymous" value="1" <?= $u['pref_default_anonymous'] ? 'checked' : '' ?>><span><b>Send concerns anonymously by default</b><br><small class="cell-sub">You can still change it on each concern.</small></span></label>
+<?php endif; ?>
+        <button class="btn btn-primary" type="submit"><?= icon('check') ?> Save preferences</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-stack">
     <div class="card" id="pwCard">
       <div class="card-head"><h3>Change password</h3></div>
       <form class="card-pad" id="pwForm" novalidate>
@@ -136,27 +151,14 @@ function render_settings_page(array $u, string $extraHtml = '', array $extraJs =
 
     <div class="card">
       <div class="card-head"><h3>Appearance</h3></div>
-      <div class="card-pad">
+      <div class="card-pad" style="display:flex;flex-direction:column;gap:16px">
         <div class="seg" id="themeSeg" role="radiogroup" aria-label="Theme">
           <button type="button" role="radio" data-theme-opt="light" aria-checked="false"><?= icon('sun') ?> Light</button>
           <button type="button" role="radio" data-theme-opt="dark" aria-checked="false"><?= icon('moon') ?> Dark</button>
           <button type="button" role="radio" data-theme-opt="system" aria-checked="false"><?= icon('monitor') ?> System</button>
         </div>
-        <p class="hint" id="themeHint" style="margin-top:10px">System follows your device and switches automatically. Saved on this browser.</p>
+        <p class="hint" id="themeHint">System follows your device and switches automatically. Saved on this browser.</p>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-head"><h3>Preferences</h3></div>
-      <form class="card-pad" id="prefForm">
-        <div class="form-msg" role="alert"></div>
-        <label class="check" style="margin-bottom:12px"><input type="checkbox" name="pref_notify_inapp" value="1" <?= $u['pref_notify_inapp'] ? 'checked' : '' ?>><span><b>In-app notifications</b><br><small class="cell-sub">Show updates in the bell and Notifications page.</small></span></label>
-        <label class="check" style="margin-bottom:12px"><input type="checkbox" name="pref_notify_email" value="1" <?= $u['pref_notify_email'] ? 'checked' : '' ?>><span><b>Email me important updates</b><br><small class="cell-sub">Password resets and urgent notices (when email is available).</small></span></label>
-<?php if ($role === 'student'): ?>
-        <label class="check" style="margin-bottom:14px"><input type="checkbox" name="pref_default_anonymous" value="1" <?= $u['pref_default_anonymous'] ? 'checked' : '' ?>><span><b>Send concerns anonymously by default</b><br><small class="cell-sub">You can still change it on each concern.</small></span></label>
-<?php endif; ?>
-        <button class="btn btn-primary" type="submit"><?= icon('check') ?> Save preferences</button>
-      </form>
     </div>
   </div>
 </section>
