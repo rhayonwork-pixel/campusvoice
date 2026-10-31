@@ -42,8 +42,8 @@ page_head('Users & Staff', 'Create accounts, assign roles and manage access.',
         <div class="field"><label for="umDept">Department</label><select class="select" id="umDept" name="department_id"><option value="">None</option></select></div>
         <div class="field"><label for="umPos">Position</label><input class="input" id="umPos" name="position"></div>
       </div>
-      <div class="row three" id="umStudentRow">
-        <div class="field"><label for="umCourse">Course</label><input class="input" id="umCourse" name="course"></div>
+      <div class="row course-row" id="umStudentRow">
+        <div class="field"><label for="umCourse">Course</label><input class="input" id="umCourse" name="course" maxlength="60" placeholder="Type or choose" data-course-picker></div>
         <div class="field"><label for="umYear">Year</label><select class="select" id="umYear" name="year_level"><?php for ($i = 1; $i <= 5; $i++) echo "<option value=\"$i\">Year $i</option>"; ?></select></div>
         <div class="field"><label for="umSec">Section</label><input class="input" id="umSec" name="section"></div>
       </div>
@@ -61,4 +61,4 @@ page_head('Users & Staff', 'Create accounts, assign roles and manage access.',
     <div class="modal-foot"><button type="button" class="btn btn-primary" data-close-modal>Done</button></div>
   </div>
 </div>
-<?php panel_close(['admin-manage.js']); ?>
+<?php panel_close(['admin-manage.js', 'course-picker.js']); ?>

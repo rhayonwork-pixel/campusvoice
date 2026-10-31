@@ -109,3 +109,5 @@ html[data-theme="dark"] { --sb-thumb: rgba(169, 195, 245, .26); --sb-thumb-hover
 [data-theme="dark"] .pager button[disabled] { opacity: .4; }
 [data-theme="dark"] .unread-row td { background: #1b2742; }
 [data-theme="dark"] .tbl td, [data-theme="dark"] .tbl th { border-color: var(--line); }
+
+[data-theme="dark"] .cp-opt:hover, [data-theme="dark"] .cp-opt.on { background: #192741; }

@@ -25,8 +25,8 @@ if (!$open): ?>
           <div class="field"><label for="last_name">Last name</label><input class="input" id="last_name" name="last_name" autocomplete="family-name" maxlength="80" required></div>
         </div>
         <h4 class="form-sec">Program</h4>
-        <div class="row three">
-          <div class="field"><label for="course">Course / program</label><input class="input" id="course" name="course" maxlength="60" placeholder="BS Information Technology" required></div>
+        <div class="row course-row">
+          <div class="field"><label for="course">Course / program</label><input class="input" id="course" name="course" maxlength="60" placeholder="Type or choose your program" data-course-picker required></div>
           <div class="field"><label for="year_level">Year level</label>
             <select class="select" id="year_level" name="year_level" required><option value="">Select</option><?php for ($i = 1; $i <= 5; $i++) echo "<option value=\"$i\">Year $i</option>"; ?></select></div>
           <div class="field"><label for="section">Section</label><input class="input" id="section" name="section" maxlength="20" placeholder="3A" required></div>
@@ -42,4 +42,4 @@ if (!$open): ?>
       </form>
 <?php endif; ?>
       <p class="auth-alt">Already registered? <a href="<?= e(url('login.php')) ?>">Sign in</a></p>
-<?php auth_close(); html_foot(['auth.js']); ?>
+<?php auth_close(); html_foot(['auth.js', 'course-picker.js']); ?>

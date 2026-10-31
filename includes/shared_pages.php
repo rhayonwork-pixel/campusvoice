@@ -95,8 +95,8 @@ function render_settings_page(array $u, string $extraHtml = '', array $extraJs =
       </div>
       <div class="field"><label for="contact_number">Contact number</label><input class="input" id="contact_number" name="contact_number" value="<?= e($u['contact_number']) ?>" placeholder="09XX XXX XXXX"></div>
       <?php if ($role === 'student'): ?>
-      <div class="row three">
-        <div class="field"><label for="course">Course</label><input class="input" id="course" name="course" value="<?= e($u['course']) ?>"></div>
+      <div class="row course-row">
+        <div class="field"><label for="course">Course</label><input class="input" id="course" name="course" maxlength="60" value="<?= e($u['course']) ?>" placeholder="Type or choose" data-course-picker></div>
         <div class="field"><label for="year_level">Year</label><select class="select" id="year_level" name="year_level"><?php for ($i = 1; $i <= 5; $i++) echo '<option value="' . $i . '"' . ((int)$u['year_level'] === $i ? ' selected' : '') . '>Year ' . $i . '</option>'; ?></select></div>
         <div class="field"><label for="section">Section</label><input class="input" id="section" name="section" value="<?= e($u['section']) ?>"></div>
       </div>
@@ -164,5 +164,5 @@ function render_settings_page(array $u, string $extraHtml = '', array $extraJs =
 </section>
 <?= $extraHtml ?>
 <?php
-    panel_close(array_merge(['shared.js'], $extraJs));
+    panel_close(array_merge(['shared.js', 'course-picker.js'], $extraJs));
 }
