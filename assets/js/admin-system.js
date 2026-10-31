@@ -64,7 +64,8 @@
     async function load() {
       try {
         const r = await CV.get(S, Object.assign({ action: 'reports' }, params())), s = r.summary, total = +s.total || 0;
-        CV.$('#periodLabel').textContent = r.label; CV.$('#printPeriod').textContent = r.label;
+        CV.$('#periodLabel').textContent = r.label;
+        CV.$('#printBtn').href = CV.url('admin/report-print.php?' + new URLSearchParams(params()).toString());
         CV.$('#csvBtn').href = CV.url('api/admin_system.php?' + new URLSearchParams(Object.assign({ action: 'export' }, params())).toString());
         CV.$('#rTotal').textContent = total; CV.$('#rRate').textContent = total ? Math.round((+s.resolved || 0) / total * 100) + '%' : '—';
         CV.$('#rHours').textContent = s.avg_hours != null ? s.avg_hours : '—'; CV.$('#rRating').textContent = r.rating.avg_rating != null ? r.rating.avg_rating + ' / 5' : '—'; CV.$('#rAnon').textContent = +s.anonymous || 0;
@@ -82,7 +83,6 @@
       if (from.value > to.value) return CV.toast('The start date must be before the end date.', 'error');
       load();
     });
-    CV.$('#printBtn').addEventListener('click', () => window.print());
     load();
   }
 })();

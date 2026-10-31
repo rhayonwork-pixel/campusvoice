@@ -2,24 +2,12 @@
 /** Admin: audit trail, calendar, reports, system settings. */
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/concerns.php';
+require_once __DIR__ . '/../includes/reports.php';
 
 $action = input('action');
 $reads = ['activity', 'calendar', 'reports', 'export', 'settings'];
 $u = api_guard(['admin'], !in_array($action, $reads, true));
 $uid = (int)$u['user_id'];
-
-/** Report period: ?from=YYYY-MM-DD&to=YYYY-MM-DD, or ?days=N (0 = all time). Returns [from, to, label]. */
-function report_range(): array
-{
-    $from = input('from'); $to = input('to');
-    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $to) && $from <= $to) {
-        return [$from . ' 00:00:00', $to . ' 23:59:59', date('M j, Y', strtotime($from)) . ' – ' . date('M j, Y', strtotime($to))];
-    }
-    $days = input_int('days', 30);
-    if ($days <= 0) return ['1970-01-01 00:00:00', '2999-12-31 23:59:59', 'All time'];
-    $days = min($days, 3650);
-    return [date('Y-m-d 00:00:00', strtotime("-{$days} days")), date('Y-m-d 23:59:59'), 'Last ' . $days . ' days'];
-}
 
 switch ($action) {
 

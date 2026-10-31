@@ -5,14 +5,9 @@ $u = require_role('admin');
 
 panel_open($u, 'Reports', 'reports.php', ['admin.css']);
 page_head('Reports', 'How concerns are being handled.',
-    '<button class="btn btn-ghost" type="button" id="printBtn">' . icon('printer') . ' Print report</button>' .
+    '<a class="btn btn-ghost" id="printBtn" target="_blank" rel="noopener" href="' . e(url('admin/report-print.php')) . '">' . icon('printer') . ' Print report</a>' .
     '<a class="btn btn-ghost" id="csvBtn" href="' . e(url('api/admin_system.php?action=export')) . '">' . icon('download') . ' Export CSV</a>');
 ?>
-<!-- shown only when printing -->
-<header class="print-head">
-  <?= logo('', 56) ?>
-  <div><h1>CampusVoice concern report</h1><p>City of Malabon University · Period: <b id="printPeriod">—</b> · Generated <?= e(date('F j, Y g:i A')) ?> by <?= e(display_name($u)) ?></p></div>
-</header>
 
 <section class="card rep-bar-card">
   <div class="card-head rep-bar">
