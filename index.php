@@ -1,7 +1,7 @@
 <?php
 require __DIR__ . '/includes/bootstrap.php';
 require __DIR__ . '/includes/layout.php';
-require __DIR__ . '/includes/icons.php';
+require_once __DIR__ . '/includes/icons.php';
 
 $me = current_user();
 

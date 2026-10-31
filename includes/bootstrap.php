@@ -13,6 +13,17 @@ error_reporting(E_ALL);
 ini_set('display_errors', cfg('app.debug') ? '1' : '0');
 ini_set('log_errors', '1');
 
+/* Any uncaught error ends here instead of a blank HTTP 500, with a message that says what to fix. */
+set_exception_handler(function (Throwable $ex) {
+    error_log('CampusVoice: ' . get_class($ex) . ': ' . $ex->getMessage() . ' @ ' . $ex->getFile() . ':' . $ex->getLine());
+    $msg = 'Something went wrong on our side. Please try again shortly.';
+    if ($ex instanceof PDOException && in_array((string)$ex->getCode(), ['42S02', '42S22'], true)) {
+        $msg = 'The database is connected, but its tables are missing or out of date. Import database/schema.sql and then database/seed.sql in phpMyAdmin.';
+    }
+    if (cfg('app.debug')) $msg .= ' [' . get_class($ex) . ': ' . $ex->getMessage() . ' in ' . basename($ex->getFile()) . ':' . $ex->getLine() . ']';
+    fail_hard(500, $msg);
+});
+
 /* ---------- config / url helpers ---------- */
 
 function cfg(string $path, $default = null)

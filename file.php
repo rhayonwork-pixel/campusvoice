@@ -33,12 +33,11 @@ if (isset($_GET['avatar'])) {
 if (isset($_GET['photo'])) {
     $p = q('SELECT p.file_path, c.concern_id, c.student_id FROM photos p JOIN concerns c ON c.concern_id = p.concern_id WHERE p.photo_id = ?', [(int)$_GET['photo']])->fetch();
     if (!$p) { http_response_code(404); exit; }
-    $ok = match ($u['role']) {
-        'admin'   => true,
-        'student' => (int)$p['student_id'] === (int)$u['user_id'],
-        'staff'   => (bool)q('SELECT 1 FROM assignments WHERE concern_id = ? AND staff_id = ?', [$p['concern_id'], $u['user_id']])->fetchColumn(),
-        default   => false,
-    };
+    // (plain if/else so it also runs on PHP 7.4)
+    $ok = false;
+    if ($u['role'] === 'admin') $ok = true;
+    elseif ($u['role'] === 'student') $ok = (int)$p['student_id'] === (int)$u['user_id'];
+    elseif ($u['role'] === 'staff') $ok = (bool)q('SELECT 1 FROM assignments WHERE concern_id = ? AND staff_id = ?', [$p['concern_id'], $u['user_id']])->fetchColumn();
     if (!$ok) { http_response_code(403); exit; }
     send_file($p['file_path']);
 }
