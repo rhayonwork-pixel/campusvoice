@@ -49,12 +49,6 @@ function asset(string $path): string
 /** Left-hand photo panel + right-hand card used by login / signup / reset pages. */
 function auth_open(string $heading, string $sub, bool $wide = false): void
 {
-    $t = 0; $d = 0;
-    try {
-        $row = q('SELECT COUNT(*) t, SUM(status IN ("Resolved","Closed")) d FROM concerns')->fetch();
-        $t = (int)$row['t']; $d = (int)$row['d'];
-    } catch (Throwable $e) { /* numbers are decoration only */ }
-    $rate = $t ? (int)round($d / $t * 100) : 0;
     icon_sprite();
     ?>
 <div class="auth">
@@ -69,11 +63,6 @@ function auth_open(string $heading, string $sub, bool $wide = false): void
       <h2>Every concern<br>deserves to be <em>heard</em>.</h2>
       <p>Report, track and resolve campus concerns in one place.</p>
     </div>
-    <dl class="auth-stats" aria-label="CampusVoice in numbers">
-      <div><dt>Reported</dt><dd><?= $t ?></dd></div>
-      <div><dt>Resolved</dt><dd><?= $d ?></dd></div>
-      <div><dt>Resolution rate</dt><dd><?= $rate ?>%</dd></div>
-    </dl>
   </aside>
   <main class="auth-main">
     <div class="auth-card<?= $wide ? ' wide' : '' ?>">
@@ -85,7 +74,6 @@ function auth_open(string $heading, string $sub, bool $wide = false): void
 
 function auth_close(): void
 {
-    echo '      <ul class="auth-trust"><li>' . icon('shield') . 'Protected sign-in</li><li>' . icon('eyeOff') . 'Anonymous reports</li><li>' . icon('lock') . 'Private by role</li></ul>' . "\n";
     echo "    </div>\n  </main>\n</div>\n";
 }
 

@@ -225,3 +225,13 @@ html { scrollbar-gutter: auto; }
 .row.course-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .row.course-row > :first-child { grid-column: 1 / -1; }
 @media (max-width: 640px) { .row.course-row { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- background: a cozy, very faint dot grid (decoration only; cards and text sit above it) ---------- */
+:root { --dot: rgba(120, 92, 40, .16); --dot-gap: 24px; }
+body.panel, body.authpage, body.landing {
+  background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.5px);
+  background-size: var(--dot-gap) var(--dot-gap);
+  background-position: 0 0;
+}
+@media (max-width: 640px) { :root { --dot-gap: 20px; } }
+@media print { body.panel, body.authpage, body.landing { background-image: none !important; } }
