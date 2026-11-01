@@ -25,8 +25,8 @@ $config = [
         'host'    => 'smtp.gmail.com',
         'port'    => 587,
         'secure'  => 'tls',              // 'tls' (port 587) or 'ssl' (port 465)
-        'user'    => '',                 // e.g. yourcampusvoice@gmail.com
-        'pass'    => '',                 // the 16-character Google app password (NOT your Gmail password)
+        'user'    => 'jafuro1302@gmail.cpom',                 // e.g. yourcampusvoice@gmail.com
+        'pass'    => 'cmzr vcef ihyu hzeq',                 // the 16-character Google app password (NOT your Gmail password)
     ],
     // PLACEHOLDER — "Continue with Google" sign-in on the login page. Not connected yet.
     'google' => [
