@@ -28,7 +28,7 @@ $config = [
         'user'    => 'jafuro1302@gmail.com',                 // e.g. yourcampusvoice@gmail.com
         'pass'    => 'cmzr vcef ihyu hzeq',                 // the 16-character Google app password (NOT your Gmail password)
     ],
-    // PLACEHOLDER — "Continue with Google" sign-in on the login page. Not connected yet.
+    // PLACEHOLDER — "Continue with Google" sign-in on the login page. Not connected yet
     'google' => [
         'enabled'        => false,
         'client_id'      => '',
