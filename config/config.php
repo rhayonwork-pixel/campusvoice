@@ -40,8 +40,8 @@ $config = [
     // Create a free widget at dash.cloudflare.com -> Turnstile, then paste the two keys here and set enabled => true.
     'turnstile' => [
         'enabled'    => false,
-        'site_key'   => '',              // public key (goes in the page)
-        'secret_key' => '',              // PRIVATE key (only the server uses it) — never share it
+        'site_key'   => '0x4AAAAAAFvWIDKWqgEKBgqz',              // public key (goes in the page)
+        'secret_key' => '0x4AAAAAAFvWIAyjTCuWwq3rfb-CFrSBYwg',              // PRIVATE key (only the server uses it) — never share it
     ],
     'security' => [
         'max_failed_per_email' => 5,    // lock after N failures ...
