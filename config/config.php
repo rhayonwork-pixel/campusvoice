@@ -25,7 +25,7 @@ $config = [
         'host'    => 'smtp.gmail.com',
         'port'    => 587,
         'secure'  => 'tls',              // 'tls' (port 587) or 'ssl' (port 465)
-        'user'    => 'jafuro1302@gmail.cpom',                 // e.g. yourcampusvoice@gmail.com
+        'user'    => 'jafuro1302@gmail.com',                 // e.g. yourcampusvoice@gmail.com
         'pass'    => 'cmzr vcef ihyu hzeq',                 // the 16-character Google app password (NOT your Gmail password)
     ],
     // PLACEHOLDER — "Continue with Google" sign-in on the login page. Not connected yet.
@@ -39,7 +39,7 @@ $config = [
     // CLOUDFLARE TURNSTILE — the "verify you are human" check on Login / Register / Forgot password.
     // Create a free widget at dash.cloudflare.com -> Turnstile, then paste the two keys here and set enabled => true.
     'turnstile' => [
-        'enabled'    => false,
+        'enabled'    => true,
         'site_key'   => '0x4AAAAAAFvWIDKWqgEKBgqz',              // public key (goes in the page)
         'secret_key' => '0x4AAAAAAFvWIAyjTCuWwq3rfb-CFrSBYwg',              // PRIVATE key (only the server uses it) — never share it
     ],
