@@ -17,14 +17,22 @@ jobs:
       - name: Upload to InfinityFree
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ftpupload.net
+          # IP of ftpupload.net: the host name's DNS is unreliable ("getaddrinfo EAI_AGAIN"); the IP skips DNS entirely.
+          # If InfinityFree ever changes it, use the FTP hostname shown in the panel's FTP details instead.
+          server: 185.27.134.11
+          port: 21
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftp
           server-dir: /htdocs/
           local-dir: ./
+          timeout: 120000
           exclude: |
             **/.git*
             **/.github/**
             **/node_modules/**
             **/.env
+            _legacy/**
+            database/**
+            README*.md
+            health.php
