@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/includes/bootstrap.php';
 require __DIR__ . '/includes/layout.php';
+require __DIR__ . '/includes/turnstile.php';
 
 if ($u = current_user()) redirect(home_for($u['role']));
 
@@ -27,6 +28,7 @@ auth_open('Welcome back', 'Sign in to your CampusVoice portal.');
           </div>
         </div>
         <div class="auth-row"><span></span><a href="<?= e(url('forgot-password.php')) ?>">Forgot password?</a></div>
+        <?= turnstile_widget() ?>
         <button class="btn btn-primary btn-block" type="submit">Sign in</button>
       </form>
       <!-- PLACEHOLDER: Google sign-in is not connected yet (see 'google' in config/config.php) -->
@@ -36,4 +38,4 @@ auth_open('Welcome back', 'Sign in to your CampusVoice portal.');
         <span>Continue with Google</span><em>Soon</em>
       </button>
       <p class="auth-alt">New student? <a href="<?= e(url('signup.php')) ?>">Create an account</a></p>
-<?php auth_close(); html_foot(['auth.js']); ?>
+<?php auth_close(); html_foot(['auth.js'], turnstile_scripts()); ?>

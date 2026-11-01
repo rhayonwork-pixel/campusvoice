@@ -118,6 +118,14 @@
       r.hours.forEach((h) => { const f = CV.$('#hoursForm'); f['active_' + h.day_of_week].checked = +h.active === 1; f['open_' + h.day_of_week].value = h.open_time || ''; f['close_' + h.day_of_week].value = h.close_time || ''; });
     }
     CV.bindForm(CV.$('#sysForm'), { url: S, action: 'settings_save', busy: 'Saving…', noRedirect: true, success: () => CV.toast('Settings saved.') });
+    const tm = CV.$('#testMail');
+    if (tm) tm.addEventListener('click', async () => {
+      const msg = CV.$('#mailMsg'); const label = tm.innerHTML;
+      tm.disabled = true; tm.innerHTML = '<span class="spin"></span> Sending…'; msg.className = 'form-msg';
+      try { const r = await CV.post(S, { action: 'test_email' }); msg.textContent = r.message; msg.className = 'form-msg show ok'; }
+      catch (e) { msg.textContent = e.message; msg.className = 'form-msg show error'; }
+      finally { tm.disabled = false; tm.innerHTML = label; }
+    });
     CV.bindForm(CV.$('#hoursForm'), { url: S, action: 'hours_save', busy: 'Saving…', noRedirect: true, success: () => CV.toast('Working hours saved.') });
     load().catch((e) => CV.toast(e.message, 'error'));
   }

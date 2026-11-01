@@ -134,10 +134,10 @@ function send_security_headers(): void
     header('X-Frame-Options: SAMEORIGIN');
     header('Referrer-Policy: strict-origin-when-cross-origin');
     header("Content-Security-Policy: default-src 'self'; "
-        . "script-src 'self' https://cdn.jsdelivr.net; "
+        . "script-src 'self' https://cdn.jsdelivr.net https://challenges.cloudflare.com; "
         . "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
         . "font-src 'self' https://fonts.gstatic.com; "
-        . "img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'");
+        . "img-src 'self' data: blob:; frame-src https://challenges.cloudflare.com; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'");
     if (is_https()) header('Strict-Transport-Security: max-age=15552000');
 }
 

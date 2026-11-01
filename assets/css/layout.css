@@ -235,3 +235,6 @@ body.panel, body.authpage, body.landing {
 }
 @media (max-width: 640px) { :root { --dot-gap: 20px; } }
 @media print { body.panel, body.authpage, body.landing { background-image: none !important; } }
+
+/* Cloudflare Turnstile widget slot */
+.cf-box { min-height: 65px; display: flex; align-items: center; justify-content: center; width: 100%; }

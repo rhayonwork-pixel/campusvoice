@@ -2,9 +2,16 @@
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/mail.php';
+require __DIR__ . '/../includes/email.php';
+require __DIR__ . '/../includes/turnstile.php';
 
 $action = input('action');
 api_guard([], true);   // POST + CSRF for every auth action
+
+// Cloudflare Turnstile on the public forms (a no-op until it is switched on in config)
+if (in_array($action, ['login', 'signup', 'forgot'], true) && ($captchaError = turnstile_check()) !== null) {
+    json_fail($captchaError, 400, ['captcha' => true]);
+}
 
 switch ($action) {
 
@@ -96,11 +103,9 @@ switch ($action) {
         $user = q('SELECT * FROM users WHERE email = ? AND account_status = "active"', [$email])->fetch();
         if ($user) {
             $token = new_reset_token((int)$user['user_id']);
-            $link  = (is_https() ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . url('reset-password.php?token=' . $token);
-            $html  = '<p>Hi ' . e($user['first_name']) . ',</p><p>Use the link below to reset your CampusVoice password. It expires in '
-                   . (int)cfg('security.reset_token_minutes') . ' minutes.</p><p><a href="' . e($link) . '">Reset my password</a></p>'
-                   . '<p>If you did not ask for this, you can ignore this email.</p>';
-            $sent = send_mail($user['email'], 'CampusVoice password reset', $html);
+            $link  = base_url() . '/reset-password.php?token=' . $token;
+            [$subject, $html] = email_password_reset($user, $link, (int)cfg('security.reset_token_minutes'));
+            $sent = send_mail($user['email'], $subject, $html);
             audit('password_reset_requested', 'Reset link ' . ($sent ? 'emailed' : 'could not be emailed'), $user);
             if (cfg('app.debug')) $generic['debug_link'] = $link;     // local testing only
         }

@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/includes/bootstrap.php';
 require __DIR__ . '/includes/layout.php';
+require __DIR__ . '/includes/turnstile.php';
 
 if ($u = current_user()) redirect(home_for($u['role']));
 $domain = setting('signup_email_domain', '');
@@ -38,8 +39,9 @@ if (!$open): ?>
             <div class="strength" id="pwBar"><i></i></div><span class="hint">8+ characters with letters and numbers.</span></div>
           <div class="field"><label for="password_confirm">Confirm password</label><input class="input" id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" required></div>
         </div>
+        <?= turnstile_widget() ?>
         <button class="btn btn-primary btn-block" type="submit">Create account</button>
       </form>
 <?php endif; ?>
       <p class="auth-alt">Already registered? <a href="<?= e(url('login.php')) ?>">Sign in</a></p>
-<?php auth_close(); html_foot(['auth.js', 'course-picker.js']); ?>
+<?php auth_close(); html_foot(['auth.js', 'course-picker.js'], turnstile_scripts()); ?>

@@ -63,3 +63,22 @@ New MySQL schema in `database/schema.sql`. Notable additions vs. the old Postgre
 4. **Staff** (`angelica…`) — greeting shows once after login, not on refresh; Today's Work shows a gold “New” row with **Start**; update a concern with a proof photo.
 5. **Admin** — Dashboard shows only Urgent items and clicking opens Notifications; Concern Management → Assignment Queue → Assign; Current Assignments → Reassign; Staff Activity updates itself; Users table shows ID first and `Dela Cruz, Juan A.`; System Activity filters by date/user/action; Calendar shows deadlines, assignments, events; open the anonymous concern and try *Reveal reporter*.
 6. **Responsive** — desktop: collapse/expand sidebar (remembered); tablet (901–1199 px): icon rail that opens over the content; phone: slide-in drawer.
+
+## Email (Gmail) setup
+
+1. Google Account → **Security** → turn on **2-Step Verification**, then open **App passwords** (myaccount.google.com/apppasswords). Create one named "CampusVoice" and copy the 16-character code (spaces are fine).
+2. In `config/config.php`, fill the `smtp` block: `'enabled' => true`, `'user' => 'yourname@gmail.com'`, `'pass' => 'abcd efgh ijkl mnop'` (host `smtp.gmail.com`, port `587`, secure `tls` stay as they are). Upload the file. Never paste the app password in chat or commit it to a public repo.
+3. Sign in as admin → **System Settings → Email → Send test email**. It tells you exactly what went wrong if it fails (wrong password, blocked connection, ...).
+4. **InfinityFree blocks outgoing SMTP**, so the test will probably say it could not connect. Nothing breaks: password reset still works with the admin-issued reset code, and the styled emails work on any host that allows SMTP.
+5. **Admin → System Settings → Email → Preview email** shows the styled email without sending anything.
+
+## Cloudflare Turnstile (human check on Login / Register / Forgot password)
+
+1. Create a free account at https://dash.cloudflare.com (your domain does **not** need to be on Cloudflare).
+2. Open **Turnstile** in the dashboard → **Add widget**.
+3. **Widget name:** CampusVoice. **Hostname management:** add your site domain (e.g. `campusvoice.freedev.app`; add `localhost` too if you test locally). **Widget mode:** Managed (recommended). Press **Create**.
+4. Copy the **Site key** (public) and the **Secret key** (private).
+5. In `config/config.php` fill the `turnstile` block: `'enabled' => true`, `'site_key' => '...'`, `'secret_key' => '...'`. Upload it.
+6. Open the login page: the check appears above the Sign in button. Keys wrong or domain missing in step 3 = the widget shows an error; fix the hostname list in the dashboard.
+
+For local testing without a Cloudflare account use Cloudflare's dummy keys: site key `1x00000000000000000000AA` with secret `1x0000000000000000000000000000000AA` (always passes). Never use dummy keys on the live site — they protect nothing.

@@ -3,6 +3,8 @@
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/concerns.php';
 require_once __DIR__ . '/../includes/reports.php';
+require_once __DIR__ . '/../includes/mail.php';
+require_once __DIR__ . '/../includes/email.php';
 
 $action = input('action');
 $reads = ['activity', 'calendar', 'reports', 'export', 'settings'];
@@ -112,6 +114,17 @@ switch ($action) {
         }
         fclose($out);
         exit;
+    }
+
+    /* ---------- email ---------- */
+    case 'test_email': {
+        $last = null;
+        [$subject, $html] = email_test($u, cfg('smtp.enabled') ? 'Gmail SMTP (' . cfg('smtp.user') . ')' : 'PHP mail()');
+        $ok = send_mail($u['email'], $subject, $html);
+        $info = mail_last();
+        audit('email_test', ($ok ? 'Test email sent via ' . $info['via'] : 'Test email failed: ' . $info['error']) . ' to ' . $u['email']);
+        if ($ok) json_out(['ok' => true, 'message' => 'Test email sent to ' . $u['email'] . ' via ' . $info['via'] . '. Check the inbox (and spam).']);
+        json_fail('Could not send the test email. ' . $info['error'], 502);
     }
 
     /* ---------- system settings ---------- */

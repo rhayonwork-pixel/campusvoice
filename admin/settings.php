@@ -45,6 +45,23 @@ ob_start(); ?>
         <button class="btn btn-primary" type="submit"><?= icon('check') ?> Save hours</button>
       </form>
     </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Email</h3></div>
+      <div class="card-pad" style="display:flex;flex-direction:column;gap:16px">
+        <dl class="kv" style="padding:0;gap:8px 16px">
+          <dt>Sending via</dt><dd><?= cfg('smtp.enabled') ? 'Gmail SMTP' : 'PHP mail() (basic)' ?></dd>
+          <dt>Sender</dt><dd><?= e(cfg('smtp.enabled') && cfg('smtp.user') ? cfg('smtp.user') : cfg('app.mail_from')) ?></dd>
+          <dt>Gmail login</dt><dd><?= cfg('smtp.enabled') ? (cfg('smtp.user') && cfg('smtp.pass') ? 'Email and app password are set' : 'Missing email or app password') : 'Off — turn on in config/config.php' ?></dd>
+        </dl>
+        <div class="form-msg" id="mailMsg" role="alert"></div>
+        <div class="toolbar">
+          <button class="btn btn-primary" type="button" id="testMail"><?= icon('mail') ?> Send test email</button>
+          <a class="btn btn-ghost" href="<?= e(url('admin/email-preview.php')) ?>" target="_blank" rel="noopener"><?= icon('eye') ?> Preview email</a>
+        </div>
+        <p class="hint">The test goes to your own email address (<?= e($u['email']) ?>).</p>
+      </div>
+    </div>
   </div>
 </section>
 <?php
