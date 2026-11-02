@@ -140,6 +140,24 @@ switch ($action) {
             'hours' => q('SELECT day_of_week, TIME_FORMAT(open_time, "%H:%i") open_time, TIME_FORMAT(close_time, "%H:%i") close_time, active FROM working_hours ORDER BY day_of_week')->fetchAll()]);
     }
 
+    case 'google_save': {
+        // Simple form instead of editing config.php. The secret is never sent back to the browser; blank = keep the saved one.
+        $cid = trim(input('client_id')); $secret = trim((string)($_POST['client_secret'] ?? '')); $domain = strtolower(trim(input('domain')));
+        $on = input('enabled') === '1' ? '1' : '0';
+        if ($cid !== '' && !preg_match('/^[0-9A-Za-z._-]{20,200}$/', $cid)) json_fail('That Client ID does not look right. Copy it again from Google (it ends with .apps.googleusercontent.com).');
+        if ($secret !== '' && !preg_match('/^[0-9A-Za-z._-]{10,200}$/', $secret)) json_fail('That Client secret does not look right. Copy it again from Google.');
+        if ($domain !== '' && !preg_match('/^[a-z0-9.-]+\.[a-z]{2,}$/', $domain)) json_fail('Enter the school email domain like school.edu.ph, or leave it empty.');
+        $hasId = $cid !== '' || setting('google_client_id', '') !== '' || cfg('google.client_id');
+        $hasSecret = $secret !== '' || setting('google_client_secret', '') !== '' || cfg('google.client_secret');
+        if ($on === '1' && (!$hasId || !$hasSecret)) json_fail('Paste the Client ID and the Client secret first, then turn it on.');
+        $put = function ($k, $v) { q('INSERT INTO settings (setting_key, setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)', [$k, $v]); };
+        if ($cid !== '') $put('google_client_id', $cid);
+        if ($secret !== '') $put('google_client_secret', $secret);
+        $put('google_domain', $domain); $put('google_enabled', $on);
+        audit('settings_changed', 'Google sign-in ' . ($on === '1' ? 'turned on' : 'turned off') . ($cid !== '' ? ' (Client ID updated)' : '') . ($secret !== '' ? ' (secret updated)' : ''));
+        json_out(['ok' => true, 'message' => $on === '1' ? 'Google sign-in is on.' : 'Saved. Google sign-in is off.']);
+    }
+
     case 'settings_save': {
         // Each Settings section saves only its own fields: validate and store whatever keys were sent.
         $int = static function (string $k, int $min, int $max) {

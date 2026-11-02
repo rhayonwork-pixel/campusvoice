@@ -76,9 +76,22 @@
     ['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
     drop.addEventListener('drop', (e) => { if (e.dataTransfer.files.length) { fileIn.files = e.dataTransfer.files; pickName(); } });
 
-    CV.get(U, { action: 'departments' }).then((r) => {
-      CV.$('#imDept').innerHTML = '<option value="">Not set</option>' + r.rows.map((d) => '<option value="' + d.department_id + '">' + E(d.department_name) + '</option>').join('');
-    });
+    // the college follows the course (shown, never asked)
+    const collegeOf = (text) => {
+      const norm = (x) => String(x).toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const t = norm(text); if (!t) return '';
+      const groups = window.CV_COURSES || [];
+      for (const g of groups) if (g.programs.some((p) => norm(p) === t || (t.length > 6 && norm(p).includes(t)))) return g.college;
+      for (const g of groups) if (g.programs.some((p) => { const m = p.match(/\(([A-Z]+)\)/); return m && m[1].length >= 3 && t.includes(m[1]); })) return g.college;
+      return '';
+    };
+    const showCollege = () => {
+      const c = collegeOf(CV.$('#imCourse').value);
+      CV.$('#imCollegeName').textContent = c || 'follows the course';
+      CV.$('#imCollege').classList.toggle('set', !!c);
+    };
+    CV.$('#imCourse').addEventListener('input', showCollege);
+    CV.$('#imCourse').addEventListener('change', showCollege);
     CV.$('#importBtn').addEventListener('click', () => {
       CV.$('#imUpload').reset(); pickName(); CV.$('.form-msg', CV.$('#imUpload')).className = 'form-msg';
       imStep(0); CV.modal.open('importModal');
@@ -111,6 +124,16 @@
         CV.$('#imGo').disabled = !res.ready;
         CV.$('#imGo').innerHTML = ic('users') + ' Create ' + res.ready + ' account' + (res.ready === 1 ? '' : 's');
         CV.$('.form-msg', CV.$('#imCommit')).className = 'form-msg';
+        // pre-fill course / year / section read from the list's title or file name
+        const d = res.detected || {};
+        const found = [];
+        CV.$('#imCourse').value = d.course || ''; CV.$('#imSec').value = d.section || '';
+        if (d.year_level) CV.$('#imYear').value = d.year_level;
+        if (d.code) found.push(d.code); if (d.year_level) found.push('Year ' + d.year_level); if (d.section) found.push('Section ' + d.section);
+        const box = CV.$('#imDetect');
+        box.hidden = !found.length;
+        if (found.length) CV.$('#imDetectText').innerHTML = 'Read <b>' + E(found.join(' · ')) + '</b> from “' + E(res.title || res.filename) + '”. Check it, then change anything that is wrong.';
+        showCollege();
         renderPreview(); imStep(1);
       }
     });
@@ -120,7 +143,7 @@
       url: U, action: 'import_commit', busy: 'Creating accounts…', noRedirect: true,
       validate: (f) => {
         const needBatch = im.rows.some((r) => !r.problem && (!r.course || !r.year_level || !r.section));
-        return needBatch && (!f.course.value.trim() || !f.section.value.trim()) ? 'Enter the course and section for this batch.' : '';
+        return needBatch && (!f.course.value.trim() || !f.section.value.trim()) ? 'Enter the course and section for this class.' : '';
       },
       success: (res) => {
         im.created = res.created; im.mode = res.mode;
@@ -228,6 +251,8 @@
       Object.keys(r.settings).forEach((k) => { const el = CV.$('#' + k); if (!el) return; if (el.type === 'checkbox') el.checked = r.settings[k] === '1'; else el.value = r.settings[k]; });
       r.hours.forEach((h) => { const f = CV.$('#hoursForm'); f['active_' + h.day_of_week].checked = +h.active === 1; f['open_' + h.day_of_week].value = h.open_time || ''; f['close_' + h.day_of_week].value = h.close_time || ''; });
     }
+    const gf = CV.$('#googleForm');
+    if (gf) CV.bindForm(gf, { url: S, action: 'google_save', busy: 'Saving…', noRedirect: true, success: (r) => { CV.toast(r.message); setTimeout(() => location.reload(), 900); } });
     CV.$$('form[data-settings]').forEach((f) => CV.bindForm(f, { url: S, action: 'settings_save', busy: 'Saving…', noRedirect: true, success: () => CV.toast('Settings saved.') }));
     const tm = CV.$('#testMail');
     if (tm) tm.addEventListener('click', async () => {
@@ -240,4 +265,13 @@
     CV.bindForm(CV.$('#hoursForm'), { url: S, action: 'hours_save', busy: 'Saving…', noRedirect: true, success: () => CV.toast('Working hours saved.') });
     load().catch((e) => CV.toast(e.message, 'error'));
   }
+
+  /* copy buttons: <button data-copy="#selector"> */
+  CV.$$('[data-copy]').forEach((b) => b.addEventListener('click', async () => {
+    const t = (CV.$(b.dataset.copy) || {}).textContent || '';
+    try { await navigator.clipboard.writeText(t); } catch (e) {
+      const r = document.createRange(); r.selectNodeContents(CV.$(b.dataset.copy)); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); document.execCommand('copy'); sel.removeAllRanges();
+    }
+    CV.toast('Copied.');
+  }));
 })();

@@ -29,10 +29,7 @@ Then: **Campus Data → Concern types** → open each type and tick its handlers
 
 ## Google sign-in (link / unlink)
 
-1. console.cloud.google.com → new project → **APIs & Services → OAuth consent screen** (External, app name CampusVoice, add your domain).
-2. **Credentials → Create credentials → OAuth client ID → Web application**. Authorized redirect URI: `https://campusvoice.freedev.app/google-callback.php`.
-3. In `config/config.php` → `google`: `'enabled' => true`, paste `client_id` and `client_secret`. Leave `redirect_uri` empty (auto) and keep `allowed_domain` to allow only university Google accounts (empty = any Google account).
-4. Students sign in with their username once, then **Settings → Linked accounts → Link Google**. After that "Continue with Google" works on the login page. Admins see the link status in Users & Staff.
+No code needed: **Admin → Settings → Google sign-in** has the 5 steps (create the Google project, copy the redirect link, get the Client ID and secret), a form to paste the two codes, and an on/off switch. Students then open **Settings → Linked accounts → Link Google** once; after that "Continue with Google" works on the login page. Admins see who is linked in Users & Staff.
 
 ## Concern routing (who gets what)
 

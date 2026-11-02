@@ -97,14 +97,15 @@ $domain = setting('signup_email_domain', '') ?: 'cityofmalabonuniversity.edu.ph'
       <div class="im-summary" id="imSummary"></div>
       <div class="im-grid">
         <div class="im-set">
-          <h4>Batch details <small>used when the file has no Course / Year / Section</small></h4>
+          <h4>Class details</h4>
+          <div class="detect" id="imDetect" hidden><?= icon('sparkle') ?><span id="imDetectText"></span></div>
           <div class="field"><label for="imCourse">Course</label><input class="input" id="imCourse" name="course" maxlength="60" placeholder="Type or choose" data-course-picker></div>
           <div class="row two">
             <div class="field"><label for="imYear">Year</label><select class="select" id="imYear" name="year_level"><?php for ($i = 1; $i <= 5; $i++) echo "<option value=\"$i\">Year $i</option>"; ?></select></div>
             <div class="field"><label for="imSec">Section</label><input class="input" id="imSec" name="section" maxlength="20" placeholder="e.g. 3B"></div>
           </div>
-          <div class="field"><label for="imDept">College</label><select class="select" id="imDept" name="department_id"><option value="">Not set</option></select></div>
-          <label class="check" id="imMidWrap"><input type="checkbox" name="middle_from_last" value="1" id="imMid" checked> Last word of the name is the middle name</label>
+          <div class="college-line" id="imCollege"><?= icon('building') ?><span>College <b id="imCollegeName">follows the course</b></span></div>
+          <label class="switch-row tight" id="imMidWrap"><span><b>Last word of the name is the middle name</b><small>"ALREEN MIGUEL DE LEON" becomes Alreen Miguel, M.I. D. Turn off if the first name has several words.</small></span><input type="checkbox" class="switch" name="middle_from_last" value="1" id="imMid" checked></label>
           <fieldset class="seg-field">
             <legend>First password</legend>
             <label class="radio-card"><input type="radio" name="password_mode" value="pattern" checked><span><b>Student ID pattern</b><small>{ID}@<?= e($domain) ?></small></span></label>

@@ -181,9 +181,9 @@ function render_settings_page(array $u, array $systemSections = [], array $extra
               <span class="link-on"><?= icon('checkCircle') ?> Linked to <?= e($u['google_email']) ?></span>
               <small>Since <?= e(date('M j, Y', strtotime((string)$u['google_linked_at']))) ?></small>
             <?php elseif (google_enabled()): ?>
-              <span>Not linked<?= cfg('google.allowed_domain') ? ' · use your @' . e(cfg('google.allowed_domain')) . ' account' : '' ?></span>
+              <span>Not linked<?= google_cfg('allowed_domain') ? ' · use your @' . e(google_cfg('allowed_domain')) . ' account' : '' ?></span>
             <?php else: ?>
-              <span>Not available yet<?= $role === 'admin' ? ': fill in the <code>google</code> block in config/config.php (see README_DEPLOY.md).' : '. The SASO office has not turned it on.' ?></span>
+              <span>Not available yet. <?= $role === 'admin' ? '<a href="#google" class="set-link-inline">Open the setup guide</a>' : 'The SASO office has not turned it on.' ?></span>
             <?php endif; ?>
           </div>
           <?php if ($u['google_sub']): ?>

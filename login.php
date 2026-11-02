@@ -2,6 +2,7 @@
 require __DIR__ . '/includes/bootstrap.php';
 require __DIR__ . '/includes/layout.php';
 require __DIR__ . '/includes/turnstile.php';
+require_once __DIR__ . '/includes/google.php';
 
 if ($u = current_user()) redirect(home_for($u['role']));
 
@@ -11,7 +12,7 @@ elseif (isset($_GET['registered'])) $notice = 'Account created. Sign in to conti
 elseif (isset($_GET['reset'])) $notice = 'Password updated. Sign in with your new password.';
 $noticeBad = false;
 if (!empty($_SESSION['flash_login_error'])) { $notice = $_SESSION['flash_login_error']; $noticeBad = true; unset($_SESSION['flash_login_error']); }
-$googleOn = (bool)cfg('google.enabled');
+$googleOn = google_enabled();
 $signupOn = setting('student_signup', '0') === '1';
 $maxTries = sec('max_failed_per_email');
 

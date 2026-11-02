@@ -4,18 +4,26 @@
  * A student first signs in with their username, then links Google in Settings → Linked accounts.
  * After that the Google button on the login page signs them straight in. Unlinking removes it again.
  *
- * Setup (config/config.php → 'google'): enabled, client_id, client_secret, and optionally redirect_uri
- * (defaults to https://YOUR-SITE/google-callback.php) and allowed_domain (empty = any Google account).
+ * Setup: Settings → Google sign-in (admin). The values are kept in the settings table; config.php 'google' is only a fallback.
  */
+
+/** Google settings: what the admin saved in Settings → Google sign-in wins; config.php is only a fallback. */
+function google_cfg(string $key)
+{
+    $map = ['client_id' => 'google_client_id', 'client_secret' => 'google_client_secret', 'allowed_domain' => 'google_domain', 'enabled' => 'google_enabled'];
+    $saved = isset($map[$key]) ? setting($map[$key], '') : '';
+    if ($saved !== '') return $key === 'enabled' ? $saved === '1' : $saved;
+    return cfg('google.' . $key);
+}
 
 function google_enabled(): bool
 {
-    return (bool)cfg('google.enabled') && cfg('google.client_id') && cfg('google.client_secret');
+    return (bool)google_cfg('enabled') && google_cfg('client_id') && google_cfg('client_secret');
 }
 
 function google_redirect_uri(): string
 {
-    $configured = (string)cfg('google.redirect_uri');
+    $configured = (string)cfg('google.redirect_uri');          // optional override in config.php; normally empty
     if ($configured !== '') return $configured;
     return (is_https() ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . base_path() . '/google-callback.php';
 }
@@ -23,14 +31,14 @@ function google_redirect_uri(): string
 function google_auth_url(string $state): string
 {
     $q = [
-        'client_id'     => cfg('google.client_id'),
+        'client_id'     => google_cfg('client_id'),
         'redirect_uri'  => google_redirect_uri(),
         'response_type' => 'code',
         'scope'         => 'openid email profile',
         'state'         => $state,
         'prompt'        => 'select_account',
     ];
-    if ($d = (string)cfg('google.allowed_domain')) $q['hd'] = $d;      // a hint for the account picker; enforced again on return
+    if ($d = (string)google_cfg('allowed_domain')) $q['hd'] = $d;      // a hint for the account picker; enforced again on return
     return 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query($q);
 }
 
@@ -59,7 +67,7 @@ function google_post(string $url, array $fields): ?array
 function google_identity(string $code)
 {
     $tok = google_post('https://oauth2.googleapis.com/token', [
-        'code' => $code, 'client_id' => cfg('google.client_id'), 'client_secret' => cfg('google.client_secret'),
+        'code' => $code, 'client_id' => google_cfg('client_id'), 'client_secret' => google_cfg('client_secret'),
         'redirect_uri' => google_redirect_uri(), 'grant_type' => 'authorization_code',
     ]);
     if (!$tok || empty($tok['id_token'])) return 'Google did not accept the sign-in. Please try again.';
@@ -67,11 +75,11 @@ function google_identity(string $code)
     if (count($parts) !== 3) return 'Google sent an unexpected response.';
     $claims = json_decode(base64_decode(strtr($parts[1], '-_', '+/')), true);
     if (!is_array($claims)) return 'Google sent an unexpected response.';
-    if (($claims['aud'] ?? '') !== cfg('google.client_id')) return 'This Google sign-in was meant for another app.';
+    if (($claims['aud'] ?? '') !== google_cfg('client_id')) return 'This Google sign-in was meant for another app.';
     if (!in_array($claims['iss'] ?? '', ['accounts.google.com', 'https://accounts.google.com'], true)) return 'Unexpected Google issuer.';
     if ((int)($claims['exp'] ?? 0) < time()) return 'The Google sign-in expired. Please try again.';
     if (empty($claims['email']) || empty($claims['email_verified'])) return 'Your Google email is not verified.';
-    $domain = strtolower((string)cfg('google.allowed_domain'));
+    $domain = strtolower((string)google_cfg('allowed_domain'));
     if ($domain !== '' && strtolower(substr(strrchr($claims['email'], '@'), 1)) !== $domain) {
         return "Use your university Google account (@{$domain}).";
     }

@@ -3,6 +3,7 @@
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/concerns.php';
+require __DIR__ . '/../includes/courses.php';
 
 $action = input('action');
 $reads = ['users', 'departments', 'categories', 'locations'];
@@ -20,7 +21,7 @@ function temp_password(): string
 /** Default first password for imported students: {StudentID}@cityofmalabonuniversity.edu.ph */
 function student_pattern_password(string $sid): string
 {
-    $domain = setting('signup_email_domain', '') ?: ((string)cfg('google.allowed_domain') ?: 'cityofmalabonuniversity.edu.ph');
+    $domain = setting('signup_email_domain', '') ?: 'cityofmalabonuniversity.edu.ph';
     return $sid . '@' . $domain;
 }
 
@@ -79,6 +80,7 @@ switch ($action) {
         $contact = mb_substr(input('contact_number'), 0, 30) ?: null;
         $position = mb_substr(input('position'), 0, 120) ?: null;
         $course = $role === 'student' ? (mb_substr(input('course'), 0, 60) ?: null) : null;
+        if ($role === 'student' && $course && !$dept) $dept = course_department($course);
         $year = $role === 'student' ? (input_int('year_level') ?: null) : null;
         $section = $role === 'student' ? (mb_substr(input('section'), 0, 20) ?: null) : null;
         if ($role === 'student' && (!$course || !$year || !$section)) json_fail('Students need a course, year level and section.');
@@ -172,7 +174,11 @@ switch ($action) {
         if (!$rows) json_fail('No student rows were found under the header.');
         $token = bin2hex(random_bytes(12));
         $_SESSION['import'] = ['token' => $token, 'rows' => $rows, 'at' => time()];
-        json_out(['ok' => true, 'token' => $token, 'title' => $sheet['title'], 'rows' => $rows,
+        // course / year / section are usually in the list's title or file name ("BSIT 2B MASTERLIST")
+        $detected = detect_batch($sheet['title'], (string)$f['name']);
+        $colId = $detected['course'] ? course_department($detected['course']) : null;
+        $detected['college'] = $colId ? q('SELECT department_name FROM departments WHERE department_id = ?', [$colId])->fetchColumn() : '';
+        json_out(['ok' => true, 'token' => $token, 'title' => $sheet['title'], 'filename' => (string)$f['name'], 'detected' => $detected, 'rows' => $rows,
                   'columns' => array_keys($map), 'has_full_name' => isset($map['full_name']),
                   'ready' => count(array_filter($rows, function ($r) { return $r['problem'] === ''; }))]);
     }
@@ -181,10 +187,8 @@ switch ($action) {
         $imp = $_SESSION['import'] ?? null;
         if (!$imp || !hash_equals($imp['token'], input('token')) || time() - $imp['at'] > 1800) json_fail('This preview has expired. Upload the file again.', 409);
         $course = mb_substr(input('course'), 0, 60); $year = input_int('year_level'); $section = mb_substr(strtoupper(input('section')), 0, 20);
-        $dept = input_int('department_id') ?: null;
         $lastIsMiddle = input('middle_from_last') === '1';
         $mode = input('password_mode') === 'random' ? 'random' : 'pattern';
-        if ($dept && !q('SELECT 1 FROM departments WHERE department_id = ?', [$dept])->fetchColumn()) json_fail('Invalid college.');
         $missing = array_filter($imp['rows'], function ($r) { return $r['problem'] === '' && (!$r['course'] || !$r['year_level'] || !$r['section']); });
         if ($missing && (!$course || $year < 1 || $year > 6 || $section === '')) json_fail('Set the course, year level and section for this batch.');
         @set_time_limit(180);
@@ -199,6 +203,7 @@ switch ($action) {
                 $email = $r['email'] !== '' && !q('SELECT 1 FROM users WHERE email = ?', [$r['email']])->fetchColumn() ? $r['email'] : null;
                 [$last, $first, $mi] = $lastIsMiddle ? $r['split_on'] : $r['split_off'];
                 $c = $r['course'] ?: $course; $y = $r['year_level'] ?: $year; $sec = $r['section'] ?: $section;
+                $dept = course_department($c);                    // college follows the course automatically
                 $pw = $mode === 'pattern' ? student_pattern_password($r['school_id']) : temp_password();
                 // cost 8 keeps a big batch fast on free hosting; the hash is upgraded on the student's first sign-in
                 $ins->execute([$r['school_id'], mb_substr($first, 0, 80), $mi ?: null, mb_substr($last, 0, 80), $email,
