@@ -4,15 +4,12 @@
  * A student first signs in with their username, then links Google in Settings → Linked accounts.
  * After that the Google button on the login page signs them straight in. Unlinking removes it again.
  *
- * Setup: Settings → Google sign-in (admin). The values are kept in the settings table; config.php 'google' is only a fallback.
+ * Setup: fill the 'google' block in config/config.php (see README_DEPLOY.md).
  */
 
-/** Google settings: what the admin saved in Settings → Google sign-in wins; config.php is only a fallback. */
+/** Google keys live in config/config.php ('google' block). The system itself only offers link / unlink. */
 function google_cfg(string $key)
 {
-    $map = ['client_id' => 'google_client_id', 'client_secret' => 'google_client_secret', 'allowed_domain' => 'google_domain', 'enabled' => 'google_enabled'];
-    $saved = isset($map[$key]) ? setting($map[$key], '') : '';
-    if ($saved !== '') return $key === 'enabled' ? $saved === '1' : $saved;
     return cfg('google.' . $key);
 }
 

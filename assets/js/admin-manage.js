@@ -251,8 +251,6 @@
       Object.keys(r.settings).forEach((k) => { const el = CV.$('#' + k); if (!el) return; if (el.type === 'checkbox') el.checked = r.settings[k] === '1'; else el.value = r.settings[k]; });
       r.hours.forEach((h) => { const f = CV.$('#hoursForm'); f['active_' + h.day_of_week].checked = +h.active === 1; f['open_' + h.day_of_week].value = h.open_time || ''; f['close_' + h.day_of_week].value = h.close_time || ''; });
     }
-    const gf = CV.$('#googleForm');
-    if (gf) CV.bindForm(gf, { url: S, action: 'google_save', busy: 'Saving…', noRedirect: true, success: (r) => { CV.toast(r.message); setTimeout(() => location.reload(), 900); } });
     CV.$$('form[data-settings]').forEach((f) => CV.bindForm(f, { url: S, action: 'settings_save', busy: 'Saving…', noRedirect: true, success: () => CV.toast('Settings saved.') }));
     const tm = CV.$('#testMail');
     if (tm) tm.addEventListener('click', async () => {

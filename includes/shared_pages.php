@@ -183,7 +183,7 @@ function render_settings_page(array $u, array $systemSections = [], array $extra
             <?php elseif (google_enabled()): ?>
               <span>Not linked<?= google_cfg('allowed_domain') ? ' · use your @' . e(google_cfg('allowed_domain')) . ' account' : '' ?></span>
             <?php else: ?>
-              <span>Not available yet. <?= $role === 'admin' ? '<a href="#google" class="set-link-inline">Open the setup guide</a>' : 'The SASO office has not turned it on.' ?></span>
+              <span>Not available yet. <?= $role === 'admin' ? 'Add the Google keys to <code>config/config.php</code> (steps in README_DEPLOY.md).' : 'The SASO office has not turned it on.' ?></span>
             <?php endif; ?>
           </div>
           <?php if ($u['google_sub']): ?>

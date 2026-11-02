@@ -29,7 +29,24 @@ Then: **Campus Data → Concern types** → open each type and tick its handlers
 
 ## Google sign-in (link / unlink)
 
-No code needed: **Admin → Settings → Google sign-in** has the 5 steps (create the Google project, copy the redirect link, get the Client ID and secret), a form to paste the two codes, and an on/off switch. Students then open **Settings → Linked accounts → Link Google** once; after that "Continue with Google" works on the login page. Admins see who is linked in Users & Staff.
+The system only offers **link / unlink**: students open **Settings → Linked accounts → Link Google** once, and then "Continue with Google" works on the login page. Admins see who is linked in Users & Staff. The Google keys themselves live in `config/config.php`:
+
+1. https://console.cloud.google.com → create a project **CampusVoice**.
+2. **Google Auth Platform** (OAuth consent screen): app name CampusVoice, audience **External**, add a contact email, finish.
+3. **Clients → Create client → Web application.** Authorized redirect URI: `https://campusvoice.freedev.app/google-callback.php` (exactly this, from your own domain).
+4. Copy the **Client ID** and **Client secret** into the `google` block of `config/config.php`:
+   ```php
+   'google' => [
+       'enabled'        => true,
+       'client_id'      => 'xxxx.apps.googleusercontent.com',
+       'client_secret'  => 'xxxx',
+       'redirect_uri'   => '',      // leave empty (built from your domain)
+       'allowed_domain' => '',      // '' = any Google account; or 'school.edu.ph' = school accounts only
+   ],
+   ```
+5. In Google, **Audience → Publish app** so anyone (not just test users) can link. Plain sign-in needs no Google review.
+
+A visitor who has no CampusVoice account still cannot get in: Google sign-in only works for accounts that were first linked from inside a signed-in profile.
 
 ## Concern routing (who gets what)
 

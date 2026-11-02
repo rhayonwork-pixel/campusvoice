@@ -34,7 +34,7 @@ $config = [
         'client_id'      => '',
         'client_secret'  => '',
         'redirect_uri'   => '',
-        'allowed_domain' => 'cityofmalabonuniversity.edu.ph',
+        'allowed_domain' => '',
     ],
     // CLOUDFLARE TURNSTILE — the "verify you are human" check on Login / Register / Forgot password.
     // Create a free widget at dash.cloudflare.com -> Turnstile, then paste the two keys here and set enabled => true.
