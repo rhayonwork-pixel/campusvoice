@@ -64,10 +64,6 @@
     });
   }
 
-  // Google sign-in placeholder (shown only while Google is not configured)
-  const googleBtn = CV.$('#googleBtn');
-  if (googleBtn) googleBtn.addEventListener('click', () => CV.toast('Google sign-in is not set up yet. Please use your username.', 'ok'));
-
   CV.bindForm(CV.$('#signupForm'), {
     url: 'api/auth.php', action: 'signup', busy: 'Creating account…', delay: 900, keepDisabled: true,
     validate: (f) => mismatch(f) || needCaptcha(f), fail: () => { resetCaptcha(); reenable('#signupForm button[type=submit]', 'Create account')(); }
