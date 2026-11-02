@@ -59,36 +59,69 @@
     if (e.target.classList && e.target.classList.contains('modal')) CV.modal.close(e.target);
   });
 
-  /* ---------- Lightbox (photos open on the same page) ---------- */
+  /* ---------- Photo viewer (opens on the same page; arrows, counter, thumbnails, swipe) ---------- */
+  const LB = { items: [], i: 0 };
   function ensureLightbox() {
     let lb = CV.$('.lightbox');
     if (lb) return lb;
     lb = document.createElement('div');
     lb.className = 'lightbox';
     lb.setAttribute('role', 'dialog'); lb.setAttribute('aria-modal', 'true'); lb.setAttribute('aria-label', 'Photo viewer');
-    lb.innerHTML = '<button type="button" class="lb-close" aria-label="Close photo">&times;</button><img alt=""><div class="lb-cap"></div>';
+    lb.innerHTML = '<div class="lb-top"><span class="lb-count"></span><span class="lb-grow"></span><a class="lb-save" download title="Save photo">Save</a><button type="button" class="lb-close" aria-label="Close photo">&times;</button></div>' +
+      '<button type="button" class="lb-nav prev" aria-label="Previous photo">&#8249;</button>' +
+      '<figure class="lb-stage"><img alt=""><figcaption class="lb-cap"></figcaption></figure>' +
+      '<button type="button" class="lb-nav next" aria-label="Next photo">&#8250;</button>' +
+      '<div class="lb-strip"></div>';
     document.body.appendChild(lb);
-    lb.addEventListener('click', (e) => { if (e.target !== lb.querySelector('img')) closeLightbox(); });
+    lb.addEventListener('click', (e) => { if (!e.target.closest('img,.lb-nav,.lb-top,.lb-strip,.lb-cap')) closeLightbox(); });
+    lb.querySelector('.lb-close').addEventListener('click', closeLightbox);
+    lb.querySelector('.prev').addEventListener('click', () => lbShow(LB.i - 1));
+    lb.querySelector('.next').addEventListener('click', () => lbShow(LB.i + 1));
+    lb.querySelector('.lb-strip').addEventListener('click', (e) => { const t = e.target.closest('[data-i]'); if (t) lbShow(+t.dataset.i); });
+    let x0 = null;                                              // swipe left / right on touch screens
+    lb.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+    lb.addEventListener('touchend', (e) => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 50) lbShow(LB.i + (dx < 0 ? 1 : -1)); });
     return lb;
   }
+  function lbShow(n) {
+    const lb = CV.$('.lightbox'); if (!lb || !LB.items.length) return;
+    LB.i = (n + LB.items.length) % LB.items.length;
+    const it = LB.items[LB.i], img = lb.querySelector('.lb-stage img');
+    img.classList.remove('in'); img.src = it.src; img.alt = it.caption || 'Concern photo';
+    requestAnimationFrame(() => img.classList.add('in'));
+    lb.querySelector('.lb-cap').textContent = it.caption || '';
+    lb.querySelector('.lb-count').textContent = LB.items.length > 1 ? (LB.i + 1) + ' / ' + LB.items.length : '';
+    lb.querySelector('.lb-save').href = it.src;
+    lb.classList.toggle('single', LB.items.length < 2);
+    CV.$$('.lb-strip [data-i]', lb).forEach((t) => t.classList.toggle('on', +t.dataset.i === LB.i));
+  }
   function closeLightbox() { const lb = CV.$('.lightbox'); if (lb) { lb.classList.remove('open'); if (!CV.$('.modal.open')) document.body.style.overflow = ''; } }
-  CV.lightbox = (src, caption) => {
+  /** items: [{src, caption}] or a single src string; start = index to open. */
+  CV.lightbox = (items, start, caption) => {
     const lb = ensureLightbox();
-    lb.querySelector('img').src = src;
-    lb.querySelector('img').alt = caption || 'Concern photo';
-    lb.querySelector('.lb-cap').textContent = caption || '';
+    LB.items = typeof items === 'string' ? [{ src: items, caption: start && typeof start === 'string' ? start : caption }] : items;
+    if (typeof start !== 'number') start = 0;
+    lb.querySelector('.lb-strip').innerHTML = LB.items.length > 1 ? LB.items.map((it, i) => '<button type="button" data-i="' + i + '" aria-label="Photo ' + (i + 1) + '"><img src="' + CV.esc(it.src) + '" alt=""></button>').join('') : '';
     lb.classList.add('open'); document.body.style.overflow = 'hidden';
+    lbShow(start);
     lb.querySelector('.lb-close').focus();
   };
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-lightbox]');
     if (!t) return;
     e.preventDefault();
+    const group = t.closest('[data-gallery]');
+    if (group) {
+      const all = CV.$$('[data-lightbox]', group);
+      return CV.lightbox(all.map((n) => ({ src: n.getAttribute('data-lightbox'), caption: n.getAttribute('data-caption') || '' })), all.indexOf(t));
+    }
     CV.lightbox(t.getAttribute('data-lightbox') || t.getAttribute('href') || t.src, t.getAttribute('data-caption') || t.getAttribute('alt') || '');
   });
   document.addEventListener('keydown', (e) => {
+    const open = CV.$('.lightbox.open');
+    if (open && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) { e.preventDefault(); return lbShow(LB.i + (e.key === 'ArrowRight' ? 1 : -1)); }
     if (e.key !== 'Escape') return;
-    if (CV.$('.lightbox.open')) closeLightbox();
+    if (open) closeLightbox();
     else CV.$$('.modal.open').forEach((m) => CV.modal.close(m));
   });
 

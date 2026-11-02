@@ -18,8 +18,15 @@
 
     photos(list, label) {
       if (!list.length) return '';
-      return '<div class="photos">' + list.map((p, i) =>
-        '<img src="' + E(p.src) + '" alt="' + E(label || 'Concern photo') + ' ' + (i + 1) + '" data-lightbox="' + E(p.src) + '" data-caption="' + E((label || 'Concern photo') + ' ' + (i + 1) + ' of ' + list.length) + '" loading="lazy">').join('') + '</div>';
+      const tag = { before: ['Before', 'before'], after: ['Proof of fix', 'after'] };
+      return '<section class="gallery" data-gallery><div class="gal-head"><b>' + ic('image') + ' Photos</b><span>' + list.length + '</span></div>' +
+        '<div class="gal-grid' + (list.length === 1 ? ' one' : '') + '">' + list.map((p, i) => {
+          const t = tag[p.photo_type];
+          const cap = (t ? t[0] : (label || 'Photo')) + ' · ' + (i + 1) + ' of ' + list.length;
+          return '<button type="button" class="gal-item" data-lightbox="' + E(p.src) + '" data-caption="' + E(cap) + '" aria-label="View ' + E(cap) + '">' +
+            '<img src="' + E(p.src) + '" alt="" loading="lazy">' + (t ? '<span class="gal-tag ' + t[1] + '">' + t[0] + '</span>' : '') +
+            '<span class="gal-zoom">' + ic('search') + '</span></button>';
+        }).join('') + '</div></section>';
     },
 
     due(c) {
