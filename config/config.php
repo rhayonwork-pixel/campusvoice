@@ -44,9 +44,9 @@ $config = [
         'secret_key' => '0x4AAAAAAFvWIAyjTCuWwq3rfb-CFrSBYwg',              // PRIVATE key (only the server uses it) — never share it
     ],
     'security' => [
-        'max_failed_per_email' => 5,    // lock after N failures ...
+        'max_failed_per_email' => 3,    // lock after N failures ...
         'max_failed_per_ip'    => 20,
-        'lockout_minutes'      => 15,   // ... within this window
+        'lockout_minutes'      => 5,    // ... for this many minutes
         'idle_timeout_minutes' => 30,
         'reset_token_minutes'  => 30,
         'min_password_length'  => 8,

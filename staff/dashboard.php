@@ -21,7 +21,7 @@ page_head('Today\'s Work', 'New and due-today assignments, most urgent first.',
 <section class="stat-grid n5" aria-label="Summary">
   <?= stat_card('Active assignments', '–', 'briefcase', 'navy', 'sActive') ?>
   <?= stat_card('In progress', '–', 'zap', 'warn', 'sProgress') ?>
-  <?= stat_card('Waiting for resources', '–', 'clock', 'info', 'sWaiting') ?>
+  <?= stat_card('Waiting on others', '–', 'clock', 'info', 'sWaiting') ?>
   <?= stat_card('Overdue', '–', 'alert', 'bad', 'sOverdue') ?>
   <?= stat_card('Resolved this week', '–', 'checkCircle', 'ok', 'sDone') ?>
 </section>

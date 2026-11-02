@@ -7,7 +7,7 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
-DROP TABLE IF EXISTS events, feedback, notifications, photos, concern_updates, assignments, concerns,
+DROP TABLE IF EXISTS category_handlers, events, feedback, notifications, photos, concern_updates, assignments, concerns,
   working_hours, settings, audit_logs, password_resets, login_attempts,
   locations, categories, users, departments;
 
@@ -20,11 +20,11 @@ CREATE TABLE departments (
 CREATE TABLE users (
   user_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   role ENUM('student','staff','admin') NOT NULL DEFAULT 'student',
-  school_id VARCHAR(30) NOT NULL UNIQUE,            -- student no. / staff no. / admin no.
+  school_id VARCHAR(30) NOT NULL UNIQUE,            -- the USERNAME: student no. / staff no. / admin no.
   first_name VARCHAR(80) NOT NULL,
   middle_initial CHAR(2) NULL,
   last_name VARCHAR(80) NOT NULL,
-  email VARCHAR(190) NOT NULL UNIQUE,
+  email VARCHAR(190) NULL UNIQUE,                   -- optional (imported students may not have one yet)
   password_hash VARCHAR(255) NOT NULL,
   department_id INT UNSIGNED NULL,
   position VARCHAR(120) NULL,
@@ -39,6 +39,9 @@ CREATE TABLE users (
   pref_notify_inapp TINYINT(1) NOT NULL DEFAULT 1,
   pref_notify_email TINYINT(1) NOT NULL DEFAULT 1,
   pref_default_anonymous TINYINT(1) NOT NULL DEFAULT 0,
+  google_sub VARCHAR(64) NULL UNIQUE,               -- linked Google account (stable Google user id)
+  google_email VARCHAR(190) NULL,
+  google_linked_at DATETIME NULL,
   last_login_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -48,7 +51,7 @@ CREATE TABLE users (
 
 CREATE TABLE login_attempts (
   attempt_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  email VARCHAR(190) NOT NULL,
+  email VARCHAR(190) NOT NULL,                       -- the sign-in identifier that was tried (username or email)
   ip_address VARCHAR(45) NOT NULL,
   success TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -72,6 +75,8 @@ CREATE TABLE categories (
   category_name VARCHAR(100) NOT NULL UNIQUE,
   description VARCHAR(255) NULL,
   default_department_id INT UNSIGNED NULL,           -- used to suggest staff on assignment
+  needs_location TINYINT(1) NOT NULL DEFAULT 0,      -- 1 = ask for building/floor/room (campus facilities)
+  next_steps VARCHAR(500) NULL,                      -- what SASO does next, shown to the student
   status ENUM('active','inactive') NOT NULL DEFAULT 'active',
   CONSTRAINT fk_cat_dept FOREIGN KEY (default_department_id) REFERENCES departments(department_id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
@@ -90,9 +95,9 @@ CREATE TABLE concerns (
   concern_code VARCHAR(20) NOT NULL UNIQUE,
   student_id INT UNSIGNED NOT NULL,                  -- always stored; hidden from staff/admin when is_anonymous = 1
   category_id INT UNSIGNED NOT NULL,
-  location_id INT UNSIGNED NOT NULL,
+  location_id INT UNSIGNED NULL,                     -- only for categories that need a location
   severity ENUM('Minor','Major','Urgent') NOT NULL DEFAULT 'Minor',
-  status ENUM('Submitted','Under Review','Assigned','In Progress','Waiting for Resources','Resolved','Reopened','Closed','Cancelled') NOT NULL DEFAULT 'Submitted',
+  status ENUM('Submitted','Pending','Under Review','Additional Info Needed','Assigned','In Progress','Waiting for Resources','Resolved','Reopened','Closed','Cancelled') NOT NULL DEFAULT 'Submitted',
   title VARCHAR(150) NOT NULL,
   description TEXT NOT NULL,
   is_anonymous TINYINT(1) NOT NULL DEFAULT 0,
@@ -113,7 +118,7 @@ CREATE TABLE assignments (
   assignment_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   concern_id INT UNSIGNED NOT NULL,
   staff_id INT UNSIGNED NOT NULL,
-  assigned_by INT UNSIGNED NOT NULL,
+  assigned_by INT UNSIGNED NULL,                    -- NULL = assigned automatically by category routing
   assigned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   assignment_status ENUM('active','reassigned','completed') NOT NULL DEFAULT 'active',
   reason VARCHAR(255) NULL,
@@ -124,6 +129,15 @@ CREATE TABLE assignments (
   CONSTRAINT fk_asg_concern FOREIGN KEY (concern_id) REFERENCES concerns(concern_id) ON DELETE CASCADE,
   CONSTRAINT fk_asg_staff FOREIGN KEY (staff_id) REFERENCES users(user_id),
   CONSTRAINT fk_asg_by FOREIGN KEY (assigned_by) REFERENCES users(user_id)
+) ENGINE=InnoDB;
+
+-- Which staff handle which concern type. With auto-assign on, new concerns go straight to the least-busy handler.
+CREATE TABLE category_handlers (
+  category_id INT UNSIGNED NOT NULL,
+  staff_id INT UNSIGNED NOT NULL,
+  PRIMARY KEY (category_id, staff_id),
+  CONSTRAINT fk_ch_cat FOREIGN KEY (category_id) REFERENCES categories(category_id) ON DELETE CASCADE,
+  CONSTRAINT fk_ch_staff FOREIGN KEY (staff_id) REFERENCES users(user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE concern_updates (

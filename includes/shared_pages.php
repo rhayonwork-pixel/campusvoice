@@ -62,107 +62,176 @@ function render_help_page(array $u): void
     panel_close();
 }
 
-/** Account settings usable by every role. Role-specific blocks appear only for the right role. */
-function render_settings_page(array $u, string $extraHtml = '', array $extraJs = []): void
+/**
+ * Settings: a section list on the left, ONE section shown at a time on the right (deep-linkable: settings.php#security).
+ * $systemSections (admin only): [['id' => 'rules', 'label' => 'Concern rules', 'icon' => 'zap', 'hint' => '...', 'html' => '...'], ...]
+ */
+function render_settings_page(array $u, array $systemSections = [], array $extraJs = []): void
 {
+    require_once __DIR__ . '/google.php';
     $role = $u['role'];
     $force = !empty($_GET['force']) || (int)$u['must_change_password'] === 1;
+    $flash = $_SESSION['flash_settings'] ?? null; unset($_SESSION['flash_settings']);
     panel_open($u, $role === 'admin' ? 'System Settings' : 'Settings', 'settings.php', $role === 'admin' ? ['admin.css'] : []);
-    page_head($role === 'admin' ? 'System Settings' : 'Settings', 'Manage your account' . ($role === 'admin' ? ' and the system.' : '.'));
-    if ($force): ?>
-<section class="note warn"><?= icon('lock') ?><div><b>Please change your password.</b> You are using a temporary password. Set a new one to continue.</div></section>
-    <?php endif; ?>
+    page_head($role === 'admin' ? 'Settings' : 'Settings', $role === 'admin' ? 'Your account and how CampusVoice runs.' : 'Manage your account, sign-in and preferences.');
 
-<section class="grid-eq" id="settingsGrid">
-  <div class="col-stack">
-  <div class="card">
-    <div class="card-head"><h3>Profile</h3></div>
-    <form class="card-pad" id="profileForm" novalidate>
-      <div class="form-msg" role="alert"></div>
-      <div class="avatar-row">
-        <span class="avatar lg"><?php if ($u['avatar']): ?><img src="<?= e(url('file.php?avatar=' . (int)$u['user_id'] . '&v=' . urlencode((string)$u['updated_at']))) ?>" alt=""><?php else: echo e(strtoupper(mb_substr($u['first_name'], 0, 1))); endif; ?></span>
-        <div class="toolbar"><label class="btn btn-ghost btn-sm" style="cursor:pointer"><?= icon('camera') ?> Change photo<input type="file" id="avatarIn" accept="image/jpeg,image/png,image/webp" hidden></label>
-          <?php if ($u['avatar']): ?><button type="button" class="btn btn-ghost btn-sm" id="avatarDel"><?= icon('trash') ?> Remove</button><?php endif; ?></div>
-      </div>
-      <div class="row">
-        <div class="field"><label>ID</label><input class="input" value="<?= e($u['school_id']) ?>" disabled></div>
-        <div class="field"><label>Email</label><input class="input" value="<?= e($u['email']) ?>" disabled></div>
-      </div>
-      <div class="row three">
-        <div class="field"><label for="first_name">First name</label><input class="input" id="first_name" name="first_name" value="<?= e($u['first_name']) ?>" required></div>
-        <div class="field"><label for="middle_initial">M.I.</label><input class="input" id="middle_initial" name="middle_initial" maxlength="2" value="<?= e($u['middle_initial']) ?>"></div>
-        <div class="field"><label for="last_name">Last name</label><input class="input" id="last_name" name="last_name" value="<?= e($u['last_name']) ?>" required></div>
-      </div>
-      <div class="field"><label for="contact_number">Contact number</label><input class="input" id="contact_number" name="contact_number" value="<?= e($u['contact_number']) ?>" placeholder="09XX XXX XXXX"></div>
-      <?php if ($role === 'student'): ?>
-      <div class="row course-row">
-        <div class="field"><label for="course">Course</label><input class="input" id="course" name="course" maxlength="60" value="<?= e($u['course']) ?>" placeholder="Type or choose" data-course-picker></div>
-        <div class="field"><label for="year_level">Year</label><select class="select" id="year_level" name="year_level"><?php for ($i = 1; $i <= 5; $i++) echo '<option value="' . $i . '"' . ((int)$u['year_level'] === $i ? ' selected' : '') . '>Year ' . $i . '</option>'; ?></select></div>
-        <div class="field"><label for="section">Section</label><input class="input" id="section" name="section" value="<?= e($u['section']) ?>"></div>
-      </div>
-      <?php else: ?>
-      <div class="field"><label for="position">Position</label><input class="input" id="position" name="position" value="<?= e($u['position']) ?>"></div>
-      <?php endif; ?>
-      <button class="btn btn-primary" type="submit"><?= icon('check') ?> Save profile</button>
-    </form>
-  </div>
-
-    <div class="card">
-      <div class="card-head"><h3>Preferences</h3></div>
-      <form class="card-pad" id="prefForm">
-        <div class="form-msg" role="alert"></div>
-        <label class="check"><input type="checkbox" name="pref_notify_inapp" value="1" <?= $u['pref_notify_inapp'] ? 'checked' : '' ?>><span><b>In-app notifications</b><br><small class="cell-sub">Show updates in the bell and Notifications page.</small></span></label>
-        <label class="check"><input type="checkbox" name="pref_notify_email" value="1" <?= $u['pref_notify_email'] ? 'checked' : '' ?>><span><b>Email me important updates</b><br><small class="cell-sub">Password resets and urgent notices (when email is available).</small></span></label>
-<?php if ($role === 'student'): ?>
-        <label class="check"><input type="checkbox" name="pref_default_anonymous" value="1" <?= $u['pref_default_anonymous'] ? 'checked' : '' ?>><span><b>Send concerns anonymously by default</b><br><small class="cell-sub">You can still change it on each concern.</small></span></label>
+    $mine = [
+        ['id' => 'profile', 'label' => 'Profile', 'icon' => 'user', 'hint' => 'Name, photo' . ($role === 'student' ? ', course' : ', position')],
+        ['id' => 'security', 'label' => 'Password', 'icon' => 'lock', 'hint' => 'Change your password'],
+        ['id' => 'linked', 'label' => 'Linked accounts', 'icon' => 'link', 'hint' => $u['google_sub'] ? 'Google linked' : 'Sign in with Google'],
+        ['id' => 'notifications', 'label' => 'Notifications', 'icon' => 'bell', 'hint' => 'What we tell you'],
+        ['id' => 'appearance', 'label' => 'Appearance', 'icon' => 'sun', 'hint' => 'Light, dark or system'],
+    ];
+    if ($role === 'staff') array_splice($mine, 1, 0, [['id' => 'availability', 'label' => 'Availability', 'icon' => 'clock', 'hint' => 'Available, busy, on leave']]);
+    $navItem = function (array $s) {
+        return '<a class="set-link" href="#' . e($s['id']) . '" role="tab" data-sec="' . e($s['id']) . '" aria-controls="sec-' . e($s['id']) . '">'
+            . '<span class="set-ic">' . icon($s['icon']) . '</span><span class="set-txt"><b>' . e($s['label']) . '</b><small>' . e($s['hint']) . '</small></span></a>';
+    };
+    $first = $force ? 'security' : 'profile';
+    ?>
+<?php if ($force): ?>
+<section class="note warn"><?= icon('lock') ?><div><b>Please change your password.</b> You are using a first-time or temporary password. Set your own to continue.</div></section>
 <?php endif; ?>
-        <button class="btn btn-primary" type="submit"><?= icon('check') ?> Save preferences</button>
-      </form>
-    </div>
-  </div>
+<section class="set-shell" id="settingsShell" data-first="<?= e($first) ?>">
+  <nav class="set-nav" role="tablist" aria-label="Settings sections">
+    <span class="set-group">Your account</span>
+    <?php foreach ($mine as $s) echo $navItem($s); ?>
+    <?php if ($systemSections): ?>
+    <span class="set-group">System</span>
+    <?php foreach ($systemSections as $s) echo $navItem($s); ?>
+    <?php endif; ?>
+  </nav>
 
-  <div class="col-stack">
-    <div class="card" id="pwCard">
-      <div class="card-head"><h3>Change password</h3></div>
-      <form class="card-pad" id="pwForm" novalidate>
-        <div class="form-msg" role="alert"></div>
-        <div class="field"><label for="current_password">Current password</label><input class="input" id="current_password" name="current_password" type="password" autocomplete="current-password" required></div>
-        <div class="row two">
-          <div class="field"><label for="password">New password</label><input class="input" id="password" name="password" type="password" autocomplete="new-password" data-strength="pwBar" required><div class="strength" id="pwBar"><i></i></div></div>
-          <div class="field"><label for="password_confirm">Confirm</label><input class="input" id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" required></div>
-        </div>
-        <button class="btn btn-primary" type="submit"><?= icon('lock') ?> Update password</button>
-      </form>
-    </div>
+  <div class="set-body">
+    <section class="set-pane" id="sec-profile" role="tabpanel" data-sec="profile">
+      <header class="set-head"><h2>Profile</h2><p>How you appear to the SASO office and staff.</p></header>
+      <div class="card">
+        <form class="card-pad set-form" id="profileForm" novalidate>
+          <div class="form-msg" role="alert"></div>
+          <div class="avatar-row">
+            <span class="avatar lg"><?php if ($u['avatar']): ?><img src="<?= e(url('file.php?avatar=' . (int)$u['user_id'] . '&v=' . urlencode((string)$u['updated_at']))) ?>" alt=""><?php else: echo e(strtoupper(mb_substr($u['first_name'], 0, 1))); endif; ?></span>
+            <div class="toolbar"><label class="btn btn-ghost btn-sm" style="cursor:pointer"><?= icon('camera') ?> Change photo<input type="file" id="avatarIn" accept="image/jpeg,image/png,image/webp" hidden></label>
+              <?php if ($u['avatar']): ?><button type="button" class="btn btn-ghost btn-sm" id="avatarDel"><?= icon('trash') ?> Remove</button><?php endif; ?></div>
+          </div>
+          <div class="row two">
+            <div class="field"><label>Username</label><input class="input mono" value="<?= e($u['school_id']) ?>" disabled><span class="hint">You sign in with this. Ask the admin to change it.</span></div>
+            <div class="field"><label>Email</label><input class="input" value="<?= e($u['email'] ?: ($u['google_email'] ?: 'None yet')) ?>" disabled><span class="hint"><?= $u['email'] ? 'Used for password reset links.' : ($u['google_email'] ? 'From your linked Google account.' : 'Link Google to receive reset emails.') ?></span></div>
+          </div>
+          <div class="row three">
+            <div class="field"><label for="first_name">First name</label><input class="input" id="first_name" name="first_name" value="<?= e($u['first_name']) ?>" required></div>
+            <div class="field"><label for="middle_initial">M.I.</label><input class="input" id="middle_initial" name="middle_initial" maxlength="2" value="<?= e($u['middle_initial']) ?>"></div>
+            <div class="field"><label for="last_name">Last name</label><input class="input" id="last_name" name="last_name" value="<?= e($u['last_name']) ?>" required></div>
+          </div>
+          <div class="field"><label for="contact_number">Contact number</label><input class="input" id="contact_number" name="contact_number" value="<?= e($u['contact_number']) ?>" placeholder="09XX XXX XXXX"></div>
+          <?php if ($role === 'student'): ?>
+          <div class="row course-row">
+            <div class="field"><label for="course">Course</label><input class="input" id="course" name="course" maxlength="60" value="<?= e($u['course']) ?>" placeholder="Type or choose" data-course-picker></div>
+            <div class="field"><label for="year_level">Year</label><select class="select" id="year_level" name="year_level"><?php for ($i = 1; $i <= 5; $i++) echo '<option value="' . $i . '"' . ((int)$u['year_level'] === $i ? ' selected' : '') . '>Year ' . $i . '</option>'; ?></select></div>
+            <div class="field"><label for="section">Section</label><input class="input" id="section" name="section" value="<?= e($u['section']) ?>"></div>
+          </div>
+          <?php else: ?>
+          <div class="field"><label for="position">Position</label><input class="input" id="position" name="position" value="<?= e($u['position']) ?>"></div>
+          <?php endif; ?>
+          <div class="set-actions"><button class="btn btn-primary" type="submit"><?= icon('check') ?> Save profile</button></div>
+        </form>
+      </div>
+    </section>
 
 <?php if ($role === 'staff'): ?>
-    <div class="card">
-      <div class="card-head"><h3>Availability</h3></div>
-      <form class="card-pad" id="availForm">
-        <div class="form-msg" role="alert"></div>
-        <div class="field"><label for="availability">Your status</label>
-          <select class="select" id="availability" name="availability">
-            <?php foreach (['available' => 'Available', 'busy' => 'Busy', 'on_leave' => 'On leave'] as $k => $v) echo '<option value="' . $k . '"' . ($u['availability'] === $k ? ' selected' : '') . '>' . $v . '</option>'; ?>
-          </select><span class="hint">Admins see this when assigning work. “On leave” hides you from suggestions.</span></div>
-        <button class="btn btn-primary" type="submit"><?= icon('check') ?> Save status</button>
-      </form>
-    </div>
+    <section class="set-pane" id="sec-availability" role="tabpanel" data-sec="availability">
+      <header class="set-head"><h2>Availability</h2><p>Routing skips you while you are on leave, and prefers available staff over busy ones.</p></header>
+      <div class="card">
+        <form class="card-pad set-form" id="availForm">
+          <div class="form-msg" role="alert"></div>
+          <div class="avail-pick" role="radiogroup" aria-label="Your status">
+            <?php foreach (['available' => ['Available', 'Taking new concerns', 'checkCircle'], 'busy' => ['Busy', 'Only if nobody else is free', 'clock'], 'on_leave' => ['On leave', 'No new concerns', 'x']] as $k => [$t, $d, $ic]): ?>
+            <label class="radio-card av-<?= $k ?>"><input type="radio" name="availability" value="<?= $k ?>" <?= $u['availability'] === $k ? 'checked' : '' ?>><span><?= icon($ic) ?><b><?= $t ?></b><small><?= $d ?></small></span></label>
+            <?php endforeach; ?>
+          </div>
+          <div class="set-actions"><button class="btn btn-primary" type="submit"><?= icon('check') ?> Save status</button></div>
+        </form>
+      </div>
+    </section>
 <?php endif; ?>
 
-    <div class="card">
-      <div class="card-head"><h3>Appearance</h3></div>
-      <div class="card-pad" style="display:flex;flex-direction:column;gap:16px">
-        <div class="seg" id="themeSeg" role="radiogroup" aria-label="Theme">
-          <button type="button" role="radio" data-theme-opt="light" aria-checked="false"><?= icon('sun') ?> Light</button>
-          <button type="button" role="radio" data-theme-opt="dark" aria-checked="false"><?= icon('moon') ?> Dark</button>
-          <button type="button" role="radio" data-theme-opt="system" aria-checked="false"><?= icon('monitor') ?> System</button>
-        </div>
-        <p class="hint" id="themeHint">System follows your device and switches automatically. Saved on this browser.</p>
+    <section class="set-pane" id="sec-security" role="tabpanel" data-sec="security">
+      <header class="set-head"><h2>Password</h2><p>Use at least <?= (int)cfg('security.min_password_length') ?> characters with letters and numbers. After <?= sec('max_failed_per_email') ?> wrong tries, sign-in locks for <?= sec('lockout_minutes') ?> minutes.</p></header>
+      <div class="card" id="pwCard">
+        <form class="card-pad set-form" id="pwForm" novalidate>
+          <div class="form-msg" role="alert"></div>
+          <div class="field"><label for="current_password">Current password</label><input class="input" id="current_password" name="current_password" type="password" autocomplete="current-password" required></div>
+          <div class="row two">
+            <div class="field"><label for="password">New password</label><input class="input" id="password" name="password" type="password" autocomplete="new-password" data-strength="pwBar" required><div class="strength" id="pwBar"><i></i></div></div>
+            <div class="field"><label for="password_confirm">Confirm</label><input class="input" id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" required></div>
+          </div>
+          <div class="set-actions"><button class="btn btn-primary" type="submit"><?= icon('lock') ?> Update password</button></div>
+        </form>
       </div>
-    </div>
+    </section>
+
+    <section class="set-pane" id="sec-linked" role="tabpanel" data-sec="linked">
+      <header class="set-head"><h2>Linked accounts</h2><p>Link Google to sign in with one tap. Your username and password keep working.</p></header>
+      <?php if ($flash): ?><div class="form-msg show <?= $flash['ok'] ? 'ok' : 'error' ?>" role="status"><?= e($flash['text']) ?></div><?php endif; ?>
+      <div class="card">
+        <div class="card-pad link-row">
+          <span class="link-logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.5 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.9a5.04 5.04 0 0 1-2.19 3.31v2.75h3.54c2.07-1.91 3.25-4.72 3.25-8.07z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.54-2.75c-.98.66-2.24 1.06-3.74 1.06-2.87 0-5.3-1.94-6.17-4.55H2.17v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.83 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.17a11 11 0 0 0 0 9.88l3.66-2.84z"/><path fill="#EA4335" d="M12 5.35c1.62 0 3.07.56 4.21 1.65l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.17 7.06l3.66 2.84C6.7 7.29 9.13 5.35 12 5.35z"/></svg></span>
+          <div class="link-main">
+            <b>Google</b>
+            <?php if ($u['google_sub']): ?>
+              <span class="link-on"><?= icon('checkCircle') ?> Linked to <?= e($u['google_email']) ?></span>
+              <small>Since <?= e(date('M j, Y', strtotime((string)$u['google_linked_at']))) ?></small>
+            <?php elseif (google_enabled()): ?>
+              <span>Not linked<?= cfg('google.allowed_domain') ? ' · use your @' . e(cfg('google.allowed_domain')) . ' account' : '' ?></span>
+            <?php else: ?>
+              <span>Not available yet<?= $role === 'admin' ? ': fill in the <code>google</code> block in config/config.php (see README_DEPLOY.md).' : '. The SASO office has not turned it on.' ?></span>
+            <?php endif; ?>
+          </div>
+          <?php if ($u['google_sub']): ?>
+            <button type="button" class="btn btn-ghost" id="googleUnlink"><?= icon('unlink') ?> Unlink</button>
+          <?php elseif (google_enabled()): ?>
+            <a class="btn btn-primary" href="<?= e(url('google-start.php?mode=link')) ?>"><?= icon('link') ?> Link Google</a>
+          <?php endif; ?>
+        </div>
+      </div>
+    </section>
+
+    <section class="set-pane" id="sec-notifications" role="tabpanel" data-sec="notifications">
+      <header class="set-head"><h2>Notifications</h2><p>Choose how CampusVoice keeps you posted.</p></header>
+      <div class="card">
+        <form class="card-pad set-form" id="prefForm">
+          <div class="form-msg" role="alert"></div>
+          <label class="switch-row"><span><b>In-app notifications</b><small>Show updates in the bell and the Notifications page.</small></span><input type="checkbox" class="switch" name="pref_notify_inapp" value="1" <?= $u['pref_notify_inapp'] ? 'checked' : '' ?>></label>
+          <label class="switch-row"><span><b>Email me important updates</b><small>Password resets and urgent notices (when an email is on file).</small></span><input type="checkbox" class="switch" name="pref_notify_email" value="1" <?= $u['pref_notify_email'] ? 'checked' : '' ?>></label>
+<?php if ($role === 'student'): ?>
+          <label class="switch-row"><span><b>Send concerns anonymously by default</b><small>Staff will not see your name. You can still change it on each concern.</small></span><input type="checkbox" class="switch" name="pref_default_anonymous" value="1" <?= $u['pref_default_anonymous'] ? 'checked' : '' ?>></label>
+<?php endif; ?>
+          <div class="set-actions"><button class="btn btn-primary" type="submit"><?= icon('check') ?> Save</button></div>
+        </form>
+      </div>
+    </section>
+
+    <section class="set-pane" id="sec-appearance" role="tabpanel" data-sec="appearance">
+      <header class="set-head"><h2>Appearance</h2><p>Saved on this browser.</p></header>
+      <div class="card">
+        <div class="card-pad set-form">
+          <div class="theme-pick" id="themeSeg" role="radiogroup" aria-label="Theme">
+            <button type="button" role="radio" data-theme-opt="light" aria-checked="false"><span class="tp-prev light"><i></i><i></i></span><?= icon('sun') ?> Light</button>
+            <button type="button" role="radio" data-theme-opt="dark" aria-checked="false"><span class="tp-prev dark"><i></i><i></i></span><?= icon('moon') ?> Dark</button>
+            <button type="button" role="radio" data-theme-opt="system" aria-checked="false"><span class="tp-prev system"><i></i><i></i></span><?= icon('monitor') ?> System</button>
+          </div>
+          <p class="hint" id="themeHint">System follows your device and switches automatically.</p>
+        </div>
+      </div>
+    </section>
+
+<?php foreach ($systemSections as $s): ?>
+    <section class="set-pane" id="sec-<?= e($s['id']) ?>" role="tabpanel" data-sec="<?= e($s['id']) ?>">
+      <header class="set-head"><h2><?= e($s['label']) ?></h2><p><?= e($s['desc'] ?? $s['hint']) ?></p></header>
+      <?= $s['html'] ?>
+    </section>
+<?php endforeach; ?>
   </div>
 </section>
-<?= $extraHtml ?>
 <?php
     panel_close(array_merge(['shared.js', 'course-picker.js'], $extraJs));
 }

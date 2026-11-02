@@ -296,7 +296,7 @@ function audit(string $action, string $details = '', ?array $actor = null): void
     $actor = $actor ?? current_user();
     q('INSERT INTO audit_logs (user_id, user_label, role, action, details, ip_address) VALUES (?,?,?,?,?,?)', [
         $actor['user_id'] ?? null,
-        $actor ? display_name($actor) . ' <' . $actor['email'] . '>' : 'Guest',
+        $actor ? display_name($actor) . ' <' . ($actor['school_id'] ?? $actor['email'] ?? '') . '>' : 'Guest',
         $actor['role'] ?? 'guest',
         $action,
         mb_substr($details, 0, 500),

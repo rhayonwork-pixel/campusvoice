@@ -5,11 +5,11 @@ require __DIR__ . '/includes/turnstile.php';
 if ($u = current_user()) redirect(home_for($u['role']));
 
 html_head('Forgot password', ['auth.css'], 'authpage');
-auth_open('Reset your password', "Enter your university email and we'll send a reset link.");
+auth_open('Reset your password', "Enter your username or email and we'll send a reset link to the email on your account.");
 ?>
       <form id="forgotForm" novalidate>
         <div class="form-msg" role="alert"></div>
-        <div class="field"><label for="email">University email</label><input class="input" id="email" name="email" type="email" autocomplete="email" required></div>
+        <div class="field"><label for="username">Username or email</label><input class="input" id="username" name="username" autocomplete="username" placeholder="Student ID, e.g. 202300378" required></div>
         <?= turnstile_widget() ?>
         <button class="btn btn-primary btn-block" type="submit">Send reset link</button>
       </form>

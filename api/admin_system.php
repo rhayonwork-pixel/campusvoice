@@ -18,7 +18,7 @@ switch ($action) {
         [$per, $page, $offset] = paginate_params(15);
         $where = ['1=1']; $args = [];
         if (($t = input('q')) !== '') {
-            $where[] = '(details LIKE :q OR user_label LIKE :q OR action LIKE :q OR ip_address LIKE :q)';
+            $where[] = "CONCAT_WS(' ', details, user_label, action, ip_address) LIKE :q";
             $args[':q'] = '%' . addcslashes($t, '%_\\') . '%';
         }
         if (($a = input('type')) !== '') { $where[] = 'action = :a'; $args[':a'] = $a; }
@@ -129,9 +129,10 @@ switch ($action) {
 
     /* ---------- system settings ---------- */
     case 'settings': {
-        $keys = ['sla_minor', 'sla_major', 'sla_urgent', 'student_signup', 'signup_email_domain', 'contact_email', 'contact_address', 'sec_max_failed', 'sec_lockout_minutes', 'sec_idle_minutes'];
+        $keys = ['sla_minor', 'sla_major', 'sla_urgent', 'student_signup', 'auto_assign', 'signup_email_domain', 'contact_email', 'contact_address', 'sec_max_failed', 'sec_lockout_minutes', 'sec_idle_minutes'];
         $vals = [];
         foreach ($keys as $k) $vals[$k] = setting($k, '');
+        $vals['auto_assign'] = $vals['auto_assign'] === '' ? '1' : $vals['auto_assign'];
         $vals['sec_max_failed'] = $vals['sec_max_failed'] ?: (string)cfg('security.max_failed_per_email');
         $vals['sec_lockout_minutes'] = $vals['sec_lockout_minutes'] ?: (string)cfg('security.lockout_minutes');
         $vals['sec_idle_minutes'] = $vals['sec_idle_minutes'] ?: (string)cfg('security.idle_timeout_minutes');
@@ -140,23 +141,38 @@ switch ($action) {
     }
 
     case 'settings_save': {
+        // Each Settings section saves only its own fields: validate and store whatever keys were sent.
         $int = static function (string $k, int $min, int $max) {
             $v = input_int($k, -1);
             if ($v < $min || $v > $max) json_fail("Value for {$k} must be between {$min} and {$max}.");
             return (string)$v;
         };
-        $domain = strtolower(input('signup_email_domain'));
-        if ($domain !== '' && !preg_match('/^[a-z0-9.-]+\.[a-z]{2,}$/', $domain)) json_fail('Enter a valid email domain, e.g. school.edu.ph');
-        $email = input('contact_email');
-        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) json_fail('Enter a valid contact email.');
-        $set = [
-            'sla_minor' => $int('sla_minor', 1, 2000), 'sla_major' => $int('sla_major', 1, 2000), 'sla_urgent' => $int('sla_urgent', 1, 2000),
-            'student_signup' => input('student_signup') === '1' ? '1' : '0', 'signup_email_domain' => $domain,
-            'contact_email' => $email, 'contact_address' => mb_substr(input('contact_address'), 0, 200),
-            'sec_max_failed' => $int('sec_max_failed', 3, 20), 'sec_lockout_minutes' => $int('sec_lockout_minutes', 1, 240), 'sec_idle_minutes' => $int('sec_idle_minutes', 5, 480),
+        $rules = [
+            'sla_minor' => function () use ($int) { return $int('sla_minor', 1, 2000); },
+            'sla_major' => function () use ($int) { return $int('sla_major', 1, 2000); },
+            'sla_urgent' => function () use ($int) { return $int('sla_urgent', 1, 2000); },
+            'sec_max_failed' => function () use ($int) { return $int('sec_max_failed', 3, 20); },
+            'sec_lockout_minutes' => function () use ($int) { return $int('sec_lockout_minutes', 1, 240); },
+            'sec_idle_minutes' => function () use ($int) { return $int('sec_idle_minutes', 5, 480); },
+            'student_signup' => function () { return input('student_signup') === '1' ? '1' : '0'; },
+            'auto_assign' => function () { return input('auto_assign') === '1' ? '1' : '0'; },
+            'signup_email_domain' => function () {
+                $d = strtolower(input('signup_email_domain'));
+                if ($d !== '' && !preg_match('/^[a-z0-9.-]+\.[a-z]{2,}$/', $d)) json_fail('Enter a valid email domain, e.g. school.edu.ph');
+                return $d;
+            },
+            'contact_email' => function () {
+                $m = input('contact_email');
+                if ($m !== '' && !filter_var($m, FILTER_VALIDATE_EMAIL)) json_fail('Enter a valid contact email.');
+                return $m;
+            },
+            'contact_address' => function () { return mb_substr(input('contact_address'), 0, 200); },
         ];
+        $set = [];
+        foreach ($rules as $k => $fn) if (array_key_exists($k, $_POST)) $set[$k] = $fn();
+        if (!$set) json_fail('Nothing to save.');
         foreach ($set as $k => $v) q('INSERT INTO settings (setting_key, setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)', [$k, $v]);
-        audit('settings_changed', 'Updated system settings');
+        audit('settings_changed', 'Updated ' . implode(', ', array_keys($set)));
         json_out(['ok' => true, 'message' => 'Settings saved.']);
     }
 

@@ -51,5 +51,27 @@
   const del = CV.$('#avatarDel');
   if (del) del.addEventListener('click', async () => { try { await CV.post(url, { action: 'avatar_remove' }); location.reload(); } catch (e) { CV.toast(e.message, 'error'); } });
 
-  if (new URLSearchParams(location.search).get('force')) { const c = CV.$('#pwCard'); if (c) c.scrollIntoView({ block: 'center' }); }
+  /* settings sections: one pane at a time, remembered in the URL hash (#profile, #security, #linked, ...) */
+  const shell = CV.$('#settingsShell');
+  if (shell) {
+    const links = CV.$$('.set-link', shell), panes = CV.$$('.set-pane', shell);
+    const ids = links.map((a) => a.dataset.sec);
+    const show = (id, focus) => {
+      if (!ids.includes(id)) id = shell.dataset.first;
+      links.forEach((a) => { const on = a.dataset.sec === id; a.classList.toggle('on', on); a.setAttribute('aria-selected', String(on)); if (on && a.scrollIntoView && window.innerWidth < 900) a.scrollIntoView({ block: 'nearest', inline: 'center' }); });
+      panes.forEach((p) => p.classList.toggle('on', p.dataset.sec === id));
+      if (focus) { const h = CV.$('#sec-' + id + ' h2'); if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); } }
+    };
+    links.forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); history.replaceState(null, '', '#' + a.dataset.sec); show(a.dataset.sec, true); }));
+    window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+    show(location.hash.slice(1) || shell.dataset.first);
+  }
+
+  const gu = CV.$('#googleUnlink');
+  if (gu) gu.addEventListener('click', async () => {
+    if (!confirm('Unlink your Google account? You can link it again any time.')) return;
+    gu.disabled = true;
+    try { const r = await CV.post(url, { action: 'google_unlink' }); CV.toast(r.message); setTimeout(() => location.reload(), 700); }
+    catch (e) { CV.toast(e.message, 'error'); gu.disabled = false; }
+  });
 })();

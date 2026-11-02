@@ -19,7 +19,7 @@ switch ($action) {
 
     case 'options': {
         json_out(['ok' => true,
-            'categories' => q('SELECT category_id, category_name FROM categories WHERE status = "active" ORDER BY category_name')->fetchAll(),
+            'categories' => q('SELECT category_id, category_name, description, needs_location, next_steps FROM categories WHERE status = "active" ORDER BY category_name = "Other", category_name')->fetchAll(),
             'locations'  => q('SELECT location_id, CONCAT(building, " · ", floor, " · ", area) AS label FROM locations WHERE status = "active" ORDER BY building, floor, area')->fetchAll(),
             'default_anonymous' => (int)$u['pref_default_anonymous'],
             'hours' => ['Minor' => severity_hours('Minor'), 'Major' => severity_hours('Major'), 'Urgent' => severity_hours('Urgent')],
@@ -28,16 +28,18 @@ switch ($action) {
 
     case 'summary': {
         $counts = q("SELECT COUNT(*) total,
-                            SUM(status IN ('Submitted','Under Review','Assigned','Reopened')) pending,
+                            SUM(status IN ('Submitted','Pending','Under Review','Assigned','Reopened')) pending,
+                            SUM(status = 'Additional Info Needed') needs_info,
                             SUM(status IN ('In Progress','Waiting for Resources')) in_progress,
                             SUM(status IN ('Resolved','Closed')) resolved
                      FROM concerns WHERE student_id = ?", [$uid])->fetch();
         $recent = q('SELECT cu.created_at, cu.update_type, cu.response, c.concern_id, c.concern_code, c.title
                      FROM concern_updates cu JOIN concerns c ON c.concern_id = cu.concern_id
                      WHERE c.student_id = ? ORDER BY cu.created_at DESC, cu.update_id DESC LIMIT 6', [$uid])->fetchAll();
+        $needInfo = q("SELECT c.concern_id, c.concern_code, c.title FROM concerns c WHERE c.student_id = ? AND c.status = 'Additional Info Needed' ORDER BY c.updated_at DESC LIMIT 5", [$uid])->fetchAll();
         $awaiting = q("SELECT c.concern_id, c.concern_code, c.title FROM concerns c LEFT JOIN feedback f ON f.concern_id = c.concern_id
                        WHERE c.student_id = ? AND c.status IN ('Resolved','Closed') AND f.feedback_id IS NULL ORDER BY c.resolved_at DESC LIMIT 5", [$uid])->fetchAll();
-        json_out(['ok' => true, 'counts' => array_map('intval', $counts), 'recent' => $recent, 'awaiting_rating' => $awaiting]);
+        json_out(['ok' => true, 'counts' => array_map('intval', $counts), 'recent' => $recent, 'awaiting_rating' => $awaiting, 'needs_info' => $needInfo]);
     }
 
     case 'list': {
@@ -46,7 +48,7 @@ switch ($action) {
         if (($s = input('status')) !== '') { $where[] = 'c.status = :st'; $args[':st'] = $s; }
         if (($v = input('severity')) !== '') { $where[] = 'c.severity = :sv'; $args[':sv'] = $v; }
         if (($t = input('q')) !== '') {
-            $where[] = '(c.title LIKE :q OR c.concern_code LIKE :q OR cat.category_name LIKE :q)';
+            $where[] = "CONCAT_WS(' ', c.title, c.concern_code, cat.category_name) LIKE :q";
             $args[':q'] = '%' . addcslashes($t, '%_\\') . '%';
         }
         $w = implode(' AND ', $where);
@@ -67,8 +69,13 @@ switch ($action) {
         if (mb_strlen($title) < 5 || mb_strlen($title) > 150) json_fail('Title must be 5–150 characters.');
         if (mb_strlen($desc) < 15 || mb_strlen($desc) > 3000) json_fail('Please describe the concern in at least 15 characters.');
         if (!in_array($sev, ['Minor', 'Major', 'Urgent'], true)) json_fail('Choose a severity level.');
-        if (!q('SELECT 1 FROM categories WHERE category_id = ? AND status = "active"', [$cat])->fetchColumn()) json_fail('Choose a category.');
-        if (!q('SELECT 1 FROM locations WHERE location_id = ? AND status = "active"', [$loc])->fetchColumn()) json_fail('Choose a location.');
+        $catRow = q('SELECT * FROM categories WHERE category_id = ? AND status = "active"', [$cat])->fetch();
+        if (!$catRow) json_fail('Choose the type of concern.');
+        if ((int)$catRow['needs_location']) {
+            if (!q('SELECT 1 FROM locations WHERE location_id = ? AND status = "active"', [$loc])->fetchColumn()) json_fail('Choose where the problem is.');
+        } else {
+            $loc = null;                                        // only campus facilities ask for a location
+        }
 
         // rate limit: stop flooding (10 concerns / hour)
         if ((int)q('SELECT COUNT(*) FROM concerns WHERE student_id = ? AND created_at > (NOW() - INTERVAL 1 HOUR)', [$uid])->fetchColumn() >= 10) {
@@ -85,14 +92,14 @@ switch ($action) {
         $pdo = db();
         $pdo->beginTransaction();
         try {
-            q('INSERT INTO concerns (concern_code, student_id, category_id, location_id, severity, title, description, is_anonymous, due_at)
-               VALUES (?,?,?,?,?,?,?,?, NOW() + INTERVAL ? HOUR)',
+            q('INSERT INTO concerns (concern_code, student_id, category_id, location_id, severity, status, title, description, is_anonymous, due_at)
+               VALUES (?,?,?,?,?,"Pending",?,?,?, NOW() + INTERVAL ? HOUR)',
                 ['TMP-' . bin2hex(random_bytes(6)), $uid, $cat, $loc, $sev, $title, $desc, $anon, severity_hours($sev)]);
             $id = (int)$pdo->lastInsertId();
             $code = next_concern_code($id);
             q('UPDATE concerns SET concern_code = ? WHERE concern_id = ?', [$code, $id]);
             foreach ($saved as $p) q('INSERT INTO photos (concern_id, uploaded_by, photo_type, file_path) VALUES (?,?,?,?)', [$id, $uid, 'supporting', $p]);
-            add_update($id, $uid, 'Submitted', 'Concern Submitted', 'Your concern has been received and is awaiting review.');
+            add_update($id, $uid, 'Pending', 'Concern Submitted', 'Your concern has been received.');
             $pdo->commit();
         } catch (Throwable $ex) {
             $pdo->rollBack();
@@ -103,10 +110,13 @@ switch ($action) {
 
         // never name an anonymous reporter in notifications or the audit trail
         $who = $anon ? 'An anonymous student' : display_name($u);
-        notify_role('admin', $sev === 'Urgent' ? 'Urgent concern' : 'New concern', "{$code} — {$title} ({$sev}) from {$who}.", $id, $sev === 'Urgent');
         if ($anon) audit_anonymous('concern_created', "Created {$code} (anonymous)");
         else audit('concern_created', "Created {$code}");
-        json_out(['ok' => true, 'message' => "Concern {$code} submitted.", 'concern_id' => $id, 'code' => $code]);
+        $routed = auto_route($id);
+        $where = $routed ? ' Routed to ' . display_name($routed) . '.' : ' Waiting in the assignment queue.';
+        notify_role('admin', $sev === 'Urgent' ? 'Urgent concern' : 'New concern', "{$code} — {$title} ({$sev}, {$catRow['category_name']}) from {$who}.{$where}", $id, $sev === 'Urgent');
+        json_out(['ok' => true, 'message' => "Concern {$code} submitted.", 'concern_id' => $id, 'code' => $code,
+                  'next_steps' => $catRow['next_steps'], 'routed' => (bool)$routed]);
     }
 
     case 'detail': {
@@ -134,6 +144,32 @@ switch ($action) {
         json_out(['ok' => true, 'message' => 'Thanks for your feedback!']);
     }
 
+    case 'reply': {
+        // The office asked for more information ("Additional Info Needed"); the student answers here.
+        $c = own_concern(input_int('id'), $uid);
+        $id = (int)$c['concern_id'];
+        if ($c['status'] !== 'Additional Info Needed') json_fail('This concern is not waiting for more information.');
+        $msg = input('message');
+        if (mb_strlen($msg) < 5 || mb_strlen($msg) > 2000) json_fail('Please write your reply (5–2000 characters).');
+        $have = (int)q('SELECT COUNT(*) FROM photos WHERE concern_id = ?', [$id])->fetchColumn();
+        $files = files_of('photos');
+        if ($have + count($files) > cfg('uploads.max_per_concern') + 2) json_fail('Too many photos on this concern.');
+        $saved = [];
+        try { foreach ($files as $f) $saved[] = save_image($f, 'concerns'); }
+        catch (RuntimeException $ex) { foreach ($saved as $p) @unlink(CV_ROOT . '/uploads/' . $p); json_fail($ex->getMessage()); }
+
+        $staffId = (int)q("SELECT staff_id FROM assignments WHERE concern_id = ? AND assignment_status = 'active' LIMIT 1", [$id])->fetchColumn();
+        $next = $staffId ? 'In Progress' : 'Under Review';
+        q('UPDATE concerns SET status = ? WHERE concern_id = ?', [$next, $id]);
+        foreach ($saved as $p) q('INSERT INTO photos (concern_id, uploaded_by, photo_type, file_path) VALUES (?,?,?,?)', [$id, $uid, 'supporting', $p]);
+        add_update($id, $uid, $next, 'Student Replied', mb_substr($msg, 0, 2000));
+        $text = "{$c['concern_code']} — the student sent the information you asked for.";
+        if ($staffId) notify($staffId, 'Student replied', $text, $id);
+        notify_role('admin', 'Student replied', $text, $id);
+        $c['is_anonymous'] ? audit_anonymous('concern_replied', "Replied on {$c['concern_code']}") : audit('concern_replied', "Replied on {$c['concern_code']}");
+        json_out(['ok' => true, 'message' => 'Reply sent. The office will continue with your concern.']);
+    }
+
     case 'confirm': case 'reopen': case 'cancel': {
         $c = own_concern(input_int('id'), $uid);
         $id = (int)$c['concern_id'];
@@ -152,7 +188,8 @@ switch ($action) {
             notify_role('admin', 'Concern reopened', "{$c['concern_code']} was reopened by the reporter.", $id, true);
             $msg = 'Concern reopened.';
         } else {
-            if ($c['status'] !== 'Submitted') json_fail('A concern can only be cancelled before it is reviewed.');
+            if (!in_array($c['status'], ['Submitted', 'Pending', 'Assigned'], true)) json_fail('A concern can only be cancelled before work starts on it.');
+            q("UPDATE assignments SET assignment_status = 'reassigned', reason = 'Cancelled by the reporter' WHERE concern_id = ? AND assignment_status = 'active'", [$id]);
             q("UPDATE concerns SET status = 'Cancelled' WHERE concern_id = ?", [$id]);
             add_update($id, $uid, 'Cancelled', 'Cancelled', 'Cancelled by the reporter.');
             $msg = 'Concern cancelled.';

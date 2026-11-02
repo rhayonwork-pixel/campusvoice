@@ -5,7 +5,7 @@ require __DIR__ . '/includes/turnstile.php';
 
 if ($u = current_user()) redirect(home_for($u['role']));
 $domain = setting('signup_email_domain', '');
-$open   = setting('student_signup', '1') === '1';
+$open   = setting('student_signup', '0') === '1';
 
 html_head('Create account', ['auth.css'], 'authpage');
 auth_open('Create your account', 'Student registration. Staff and admin accounts are created by the administrator.', true);

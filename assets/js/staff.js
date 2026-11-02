@@ -5,7 +5,7 @@
   const reporter = (r) => '<div class="cell-title">' + E(r.reporter_name) + '</div><div class="cell-sub">' +
     E([r.reporter_course, r.reporter_year ? 'Year ' + r.reporter_year : '', r.reporter_section].filter(Boolean).join(' · ')) + '</div>';
   const newBadge = (r) => (+r.is_new === 1 ? ' <span class="badge badge-new">New</span>' : '');
-  const titleCell = (r) => '<div class="cell-title">' + E(r.title) + newBadge(r) + CV.ui.anon(r) + '</div><div class="cell-sub">' + E(r.concern_code) + ' · ' + E(r.location) + '</div>';
+  const titleCell = (r) => '<div class="cell-title">' + E(r.title) + newBadge(r) + CV.ui.anon(r) + '</div><div class="cell-sub">' + E(r.concern_code) + ' · ' + E(r.category_name) + (r.location ? ' · ' + E(r.location) : '') + '</div>';
   const viewUrl = (r) => CV.url('staff/concern.php?id=' + r.concern_id);
 
   /* ---------- dashboard ---------- */
@@ -23,7 +23,7 @@
       const r = await CV.get('api/staff.php', { action: 'today' });
       CV.$('#todayCount').textContent = r.rows.length;
       CV.$('tbody', today).innerHTML = r.rows.length ? r.rows.map((x) => {
-        const canStart = ['Assigned', 'Reopened', 'Submitted', 'Under Review'].includes(x.status);
+        const canStart = ['Assigned', 'Reopened', 'Submitted', 'Pending', 'Under Review'].includes(x.status);
         return '<tr class="' + (+x.is_new ? 'is-new' : '') + '"><td>' + titleCell(x) + '</td><td>' + CV.badge.sev(x.severity) + '</td><td>' + CV.badge.st(x.status) + '</td><td class="nw">' + CV.ui.due(x) + '</td>' +
           '<td class="nw"><a class="btn btn-ghost btn-sm" href="' + viewUrl(x) + '">' + ic('eye') + ' View</a> ' +
           (canStart ? '<button class="btn btn-primary btn-sm" data-start="' + x.concern_id + '">' + ic('play') + ' Start</button>' : '') + '</td></tr>';
@@ -69,23 +69,30 @@
       const who = '<b>' + E(c.reporter_name) + '</b>' + (+c.is_anonymous ? '' : '<br><span class="cell-sub">' + E(c.reporter_school_id || '') + ' · ' + E(c.reporter_email || '') + (c.reporter_contact ? ' · ' + E(c.reporter_contact) : '') + '</span>') +
         '<br><span class="cell-sub">' + E([c.reporter_course, c.reporter_year ? 'Year ' + c.reporter_year : '', c.reporter_section].filter(Boolean).join(' · ')) + '</span>';
       const form = active ? '<div class="card"><div class="card-head"><h3>Update this concern</h3></div><form class="card-pad" id="updForm" enctype="multipart/form-data"><div class="form-msg" role="alert"></div>' +
-        '<div class="field"><label for="st">New status</label><select class="select" id="st" name="status"><option>In Progress</option><option>Waiting for Resources</option><option>Resolved</option></select></div>' +
-        '<div class="field"><label for="note">Note <span class="hint">(required for Resolved / Waiting)</span></label><textarea class="textarea" id="note" name="note" maxlength="1000" placeholder="What was done, or what is needed?"></textarea></div>' +
+        '<div class="field"><label for="st">New status</label><select class="select" id="st" name="status"><option>In Progress</option><option value="Additional Info Needed">Additional info needed (ask the student)</option><option>Waiting for Resources</option><option>Resolved</option></select></div>' +
+        '<div class="field"><label for="note" id="noteLabel">Note <span class="hint">(required for Resolved / Waiting)</span></label><textarea class="textarea" id="note" name="note" maxlength="1000" placeholder="What was done, or what is needed?"></textarea></div>' +
         '<div class="field"><span class="label">Proof photo <span class="hint">(optional)</span></span><label class="dropzone">' + ic('camera') + '<span id="proofName">Click to add a photo</span><input type="file" name="proof" accept="image/jpeg,image/png,image/webp"></label></div>' +
         '<button class="btn btn-primary" type="submit">' + ic('check') + ' Save update</button></form></div>' : '<div class="note">' + ic('checkCircle') + '<div>This concern is no longer active for you.</div></div>';
 
       detail.innerHTML = '<div class="grid-2"><div style="display:flex;flex-direction:column;gap:var(--gap)">' +
         '<div class="card"><div class="card-head"><div><h3>' + E(c.title) + '</h3><div class="cell-sub">' + E(c.concern_code) + '</div></div><div class="toolbar">' + CV.badge.sev(c.severity) + CV.badge.st(c.status) + CV.ui.anon(c) + '</div></div>' +
-        '<dl class="kv"><dt>Reporter</dt><dd>' + who + '</dd><dt>Category</dt><dd>' + E(c.category_name) + '</dd><dt>Location</dt><dd>' + E(c.location) + '</dd><dt>Submitted</dt><dd>' + CV.fmtDate(c.created_at, true) + '</dd>' +
+        '<dl class="kv"><dt>Reporter</dt><dd>' + who + '</dd><dt>Type</dt><dd>' + E(c.category_name) + '</dd>' + (c.location ? '<dt>Location</dt><dd>' + E(c.location) + '</dd>' : '') + '<dt>Submitted</dt><dd>' + CV.fmtDate(c.created_at, true) + '</dd>' +
         '<dt>Target date</dt><dd>' + CV.ui.due(c) + '</dd><dt>Description</dt><dd>' + E(c.description).replace(/\n/g, '<br>') + '</dd></dl>' + CV.ui.photos(r.photos, 'Photo') + '</div>' + form + '</div>' +
         '<div class="card"><div class="card-head"><h3>Progress</h3></div>' + CV.ui.timeline(r.timeline) + '</div></div>';
 
       const f = CV.$('#updForm', detail);
       if (f) {
+        // asking the student: the note becomes the question they will see
+        f.status.addEventListener('change', () => {
+          const ask = f.status.value === 'Additional Info Needed';
+          CV.$('#noteLabel').innerHTML = ask ? 'Question for the student <span class="hint">(they will see this)</span>' : 'Note <span class="hint">(required for Resolved / Waiting)</span>';
+          f.note.placeholder = ask ? 'e.g. Please send a screenshot of the message and the date it happened.' : 'What was done, or what is needed?';
+        });
         f.proof.addEventListener('change', () => { CV.$('#proofName').textContent = f.proof.files[0] ? f.proof.files[0].name : 'Click to add a photo'; });
         const fd = document.createElement('input'); fd.type = 'hidden'; fd.name = 'id'; fd.value = id; f.appendChild(fd);
         CV.bindForm(f, { url: 'api/staff.php', action: 'update', busy: 'Saving…', noRedirect: true,
-          validate: (x) => (['Resolved', 'Waiting for Resources'].includes(x.status.value) && x.note.value.trim().length < 5 ? 'Please add a short note.' : ''),
+          validate: (x) => (x.status.value === 'Additional Info Needed' && x.note.value.trim().length < 10 ? 'Write the question for the student (at least 10 characters).' :
+            ['Resolved', 'Waiting for Resources'].includes(x.status.value) && x.note.value.trim().length < 5 ? 'Please add a short note.' : ''),
           success: (res) => { CV.toast(res.message); load(); } });
       }
     }

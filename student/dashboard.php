@@ -14,6 +14,7 @@ page_head('Hello, ' . $u['first_name'] . '!', 'Here is where your concerns stand
   <?= stat_card('Resolved', '–', 'checkCircle', 'ok', 'sResolved') ?>
 </section>
 
+<section class="note warn" id="infoNote" hidden><?= icon('reply') ?><div id="infoText"></div></section>
 <section class="note" id="ratingNote" hidden><?= icon('star') ?><div id="ratingText"></div></section>
 
 <section class="grid-2">

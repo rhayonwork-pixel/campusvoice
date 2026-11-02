@@ -3,8 +3,9 @@
   'use strict';
   const E = CV.esc, ic = CV.ui.ic, API = 'api/admin.php';
   const ctx = (r) => E([r.reporter_course, r.reporter_year ? 'Year ' + r.reporter_year : '', r.reporter_section].filter(Boolean).join(' · '));
-  const reporter = (r) => '<div class="cell-title">' + E(r.reporter_name) + '</div><div class="cell-sub">' + ctx(r) + '</div>';
-  const titleCell = (r) => '<div class="cell-title">' + E(r.title) + CV.ui.anon(r) + '</div><div class="cell-sub">' + E(r.concern_code) + ' · ' + E(r.location) + '</div>';
+  // the admin sees the real sender; anonymous ones are marked because staff only see "Anonymous Student"
+  const reporter = (r) => '<div class="cell-title">' + E(r.reporter_name) + (+r.is_anonymous ? ' <span class="anon-mark" title="Sent anonymously: staff see Anonymous Student">' + ic('eyeOff') + '</span>' : '') + '</div><div class="cell-sub">' + ctx(r) + '</div>';
+  const titleCell = (r) => '<div class="cell-title">' + E(r.title) + CV.ui.anon(r) + '</div><div class="cell-sub">' + E(r.concern_code) + ' · ' + E(r.category_name) + (r.location ? ' · ' + E(r.location) : '') + '</div>';
   const viewUrl = (id) => CV.url('admin/concern.php?id=' + id);
 
   /* ---------- dashboard ---------- */
@@ -46,7 +47,7 @@
     try {
       const r = await CV.get(API, { action: 'staff_options', category_id: c.category_id });
       CV.$('#amStaff').innerHTML = '<option value="">Select staff</option>' + r.staff.map((s) =>
-        '<option value="' + s.user_id + '"' + (+c.staff_id === +s.user_id ? ' disabled' : '') + '>' + E(s.name) + ' — ' + E(s.department_name || 'No dept') + ' · ' + s.active_load + ' active' + (s.availability === 'busy' ? ' · busy' : '') + (+s.dept_match ? ' ★' : '') + '</option>').join('');
+        '<option value="' + s.user_id + '"' + (+c.staff_id === +s.user_id ? ' disabled' : '') + '>' + (+s.is_handler ? '★ ' : '') + E(s.name) + ' — ' + E(s.department_name || 'No office') + ' · ' + s.active_load + ' active' + (s.availability === 'busy' ? ' · busy' : '') + '</option>').join('');
     } catch (e) { CV.toast(e.message, 'error'); }
   }
   if (modal) CV.bindForm(CV.$('#assignForm'), { url: API, action: 'assign', busy: 'Saving…', noRedirect: true,
@@ -73,7 +74,7 @@
     // table object needs the tab-specific row renderer, so wrap it
     const tbl = CV.table({
       el: CV.$('#paneList'), url: API, cols: 6, per: 10,
-      params: () => ({ action: 'list', tab, q: CV.$('#fq').value.trim(), status: CV.$('#fstatus').value, severity: CV.$('#fsev').value }),
+      params: () => ({ action: 'list', tab, q: CV.$('#fq').value.trim(), status: CV.$('#fstatus').value, severity: CV.$('#fsev').value, category_id: CV.$('#fcat').value }),
       empty: { title: 'Nothing here', text: 'No concerns match this view.' },
       row: (r) => { store[r.concern_id] = r; return rows[tab](r); },
       onData: (j) => { CV.$('#cQueue').textContent = j.tab_counts.queue; CV.$('#cAssign').textContent = j.tab_counts.assignments; }
@@ -108,6 +109,7 @@
     CV.$('#fq').addEventListener('input', CV.debounce(() => tbl.first(), 350));
     CV.$('#fstatus').addEventListener('change', () => tbl.first());
     CV.$('#fsev').addEventListener('change', () => tbl.first());
+    CV.$('#fcat').addEventListener('change', () => tbl.first());
     mgmt.addEventListener('click', (e) => {
       const a = e.target.closest('[data-assign]'), ra = e.target.closest('[data-reassign]');
       if (a) { afterAssign = () => tbl.reload(true); openAssign(store[a.dataset.assign], false); return; }
@@ -129,17 +131,18 @@
     function render(r) {
       const c = r.concern, a = r.assignment, closed = ['Closed', 'Cancelled'].includes(c.status);
       const anon = +c.is_anonymous === 1;
-      const who = '<b>' + E(c.reporter_name) + '</b>' + (anon ? '' : '<br><span class="cell-sub">' + E(c.reporter_school_id || '') + ' · ' + E(c.reporter_email || '') + (c.reporter_contact ? ' · ' + E(c.reporter_contact) : '') + '</span>') + '<br><span class="cell-sub">' + ctx(c) + '</span>' +
-        (anon ? '<br><button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px" data-open-modal="revealModal">' + ic('eye') + ' Reveal reporter</button>' : '');
+      const who = '<b>' + E(c.reporter_name) + '</b><br><span class="cell-sub">' + [c.reporter_school_id, c.reporter_email, c.reporter_contact].filter(Boolean).map(E).join(' · ') + '</span>' +
+        '<br><span class="cell-sub">' + ctx(c) + '</span>' +
+        (anon ? '<div class="anon-note">' + ic('eyeOff') + '<span>Sent anonymously. Only admins see this name; staff see <b>Anonymous Student</b>.</span></div>' : '');
       const actions = closed ? '' : '<button class="btn btn-primary btn-sm" id="doAssign">' + ic('users') + ' ' + (a ? 'Reassign' : 'Assign') + '</button> <button class="btn btn-ghost btn-sm" data-open-modal="statusModal">' + ic('edit') + ' Change status</button> ' +
         '<select class="select" id="sevSel" aria-label="Severity" style="width:auto;padding:.4rem .7rem">' + ['Minor', 'Major', 'Urgent'].map((s) => '<option' + (s === c.severity ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>';
       detail.innerHTML = '<div class="grid-2"><div style="display:flex;flex-direction:column;gap:var(--gap)">' +
         '<div class="card"><div class="card-head"><div><h3>' + E(c.title) + '</h3><div class="cell-sub">' + E(c.concern_code) + '</div></div><div class="toolbar">' + CV.badge.sev(c.severity) + CV.badge.st(c.status) + CV.ui.anon(c) + '</div></div>' +
-        '<dl class="kv"><dt>Reporter</dt><dd>' + who + '</dd><dt>Category</dt><dd>' + E(c.category_name) + '</dd><dt>Location</dt><dd>' + E(c.location) + '</dd><dt>Submitted</dt><dd>' + CV.fmtDate(c.created_at, true) + '</dd>' +
+        '<dl class="kv"><dt>Reporter</dt><dd>' + who + '</dd><dt>Type</dt><dd>' + E(c.category_name) + '</dd>' + (c.location ? '<dt>Location</dt><dd>' + E(c.location) + '</dd>' : '') + '<dt>Submitted</dt><dd>' + CV.fmtDate(c.created_at, true) + '</dd>' +
         '<dt>Target date</dt><dd>' + CV.ui.due(c) + '</dd><dt>Assigned to</dt><dd>' + (a ? E(a.staff_name) : 'Not assigned') + '</dd><dt>Description</dt><dd>' + E(c.description).replace(/\n/g, '<br>') + '</dd>' +
         (r.feedback ? '<dt>Rating</dt><dd>' + CV.ui.stars(+r.feedback.rating) + (r.feedback.comment ? '<br>' + E(r.feedback.comment) : '') + '</dd>' : '') + '</dl>' +
         CV.ui.photos(r.photos, 'Photo') + (actions ? '<div class="card-head" style="border-top:1px solid var(--line);border-bottom:0"><span class="cell-sub">Actions</span><div class="toolbar">' + actions + '</div></div>' : '') + '</div>' +
-        '<div class="card"><div class="card-head"><h3>Assignment history</h3></div>' + (r.history.length ? '<div class="list">' + r.history.map((h) => '<div class="list-item"><div class="li-main"><b>' + E(h.staff_name) + '</b><span>' + CV.fmtDate(h.assigned_at, true) + (h.reason ? ' · ' + E(h.reason) : '') + '</span></div><span class="badge st-' + (h.assignment_status === 'active' ? 'In-Progress' : h.assignment_status === 'completed' ? 'Resolved' : 'Cancelled') + '">' + E(h.assignment_status) + '</span></div>').join('') + '</div>' : '<div class="empty">Not assigned yet.</div>') + '</div></div>' +
+        '<div class="card"><div class="card-head"><h3>Assignment history</h3></div>' + (r.history.length ? '<div class="list">' + r.history.map((h) => '<div class="list-item"><div class="li-main"><b>' + E(h.staff_name) + (+h.auto ? ' <span class="auto-tag">' + ic('route') + ' auto</span>' : '') + '</b><span>' + CV.fmtDate(h.assigned_at, true) + (h.reason ? ' · ' + E(h.reason) : '') + '</span></div><span class="badge st-' + (h.assignment_status === 'active' ? 'In-Progress' : h.assignment_status === 'completed' ? 'Resolved' : 'Cancelled') + '">' + E(h.assignment_status) + '</span></div>').join('') + '</div>' : '<div class="empty">Not assigned yet.</div>') + '</div></div>' +
         '<div class="card"><div class="card-head"><h3>Progress</h3></div>' + CV.ui.timeline(r.timeline) + '</div></div>';
 
       const da = CV.$('#doAssign', detail);
@@ -147,16 +150,10 @@
       const sv = CV.$('#sevSel', detail);
       if (sv) sv.addEventListener('change', async () => { try { const x = await CV.post(API, { action: 'set_severity', id, severity: sv.value }); CV.toast(x.message); load(); } catch (e) { CV.toast(e.message, 'error'); load(); } });
     }
-    CV.$('#revealForm') && (CV.$('#rvId').value = id);
     CV.$('#stId') && (CV.$('#stId').value = id);
-    CV.bindForm(CV.$('#statusForm'), { url: API, action: 'set_status', busy: 'Saving…', noRedirect: true, success: (res) => { CV.toast(res.message); CV.modal.close('statusModal'); load(); } });
-    CV.bindForm(CV.$('#revealForm'), { url: API, action: 'reveal', busy: 'Revealing…', noRedirect: true, keepDisabled: true,
-      success: (res, form) => {
-        const r = res.reporter; const box = CV.$('#rvResult'); box.hidden = false;
-        box.innerHTML = '<div class="note">' + ic('user') + '<div><b>' + E(r.name) + '</b><br>' + E(r.school_id) + ' · ' + E(r.email) + (r.contact ? ' · ' + E(r.contact) : '') + '</div></div>';
-        CV.$('#rvBtn').hidden = true;
-      } });
-    CV.$('#revealModal') && CV.$('#revealModal').addEventListener('cv:open', () => { CV.$('#rvResult').hidden = true; CV.$('#rvBtn').hidden = false; CV.$('#rvBtn').disabled = false; CV.$('#rvReason').value = ''; });
+    CV.bindForm(CV.$('#statusForm'), { url: API, action: 'set_status', busy: 'Saving…', noRedirect: true,
+      validate: (f) => (f.status.value === 'Additional Info Needed' && f.note.value.trim().length < 10 ? 'Tell the student exactly what information you need.' : ''),
+      success: (res) => { CV.toast(res.message); CV.modal.close('statusModal'); load(); } });
     load();
   }
 })();

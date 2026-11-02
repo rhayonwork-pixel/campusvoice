@@ -1,5 +1,5 @@
 <?php
-/** Admin: dashboard, concern management, assignment, staff workload, anonymous reveal. */
+/** Admin: dashboard, concern management, assignment, staff workload. The admin always sees who sent an anonymous concern. */
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/concerns.php';
 
@@ -8,7 +8,7 @@ $reads = ['dashboard', 'list', 'workload', 'detail', 'staff_options'];
 $u = api_guard(['admin'], !in_array($action, $reads, true));
 $uid = (int)$u['user_id'];
 
-const ALL_STATUSES = ['Submitted', 'Under Review', 'Assigned', 'In Progress', 'Waiting for Resources', 'Resolved', 'Reopened', 'Closed', 'Cancelled'];
+const ALL_STATUSES = ['Pending', 'Under Review', 'Additional Info Needed', 'Assigned', 'In Progress', 'Waiting for Resources', 'Resolved', 'Reopened', 'Closed', 'Cancelled', 'Submitted'];
 
 function admin_concern(int $id): array
 {
@@ -27,7 +27,7 @@ switch ($action) {
 
     case 'dashboard': {
         $s = q("SELECT COUNT(*) total,
-                       SUM(status IN ('Submitted','Under Review','Reopened') AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.concern_id = concerns.concern_id AND a.assignment_status = 'active')) unassigned,
+                       SUM(status IN " . CV_QUEUE_STATUSES . " AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.concern_id = concerns.concern_id AND a.assignment_status = 'active')) unassigned,
                        SUM(status IN ('Assigned','In Progress','Waiting for Resources')) in_progress,
                        SUM(due_at < NOW() AND status NOT IN " . CV_OPEN_STATUSES . ") overdue,
                        SUM(status IN ('Resolved','Closed')) resolved
@@ -50,22 +50,25 @@ switch ($action) {
         $where = ['1=1']; $args = [];
         if ($tab === 'queue') {
             // unassigned only — reassign items now live under Current Assignments
-            $where[] = "c.status IN ('Submitted','Under Review','Reopened')";
+            $where[] = 'c.status IN ' . CV_QUEUE_STATUSES;
             $where[] = "NOT EXISTS (SELECT 1 FROM assignments a WHERE a.concern_id = c.concern_id AND a.assignment_status = 'active')";
         } elseif ($tab === 'assignments') {
             $where[] = "EXISTS (SELECT 1 FROM assignments a WHERE a.concern_id = c.concern_id AND a.assignment_status = 'active')";
         }
-        if (($s = input('status')) !== '' && in_array($s, ALL_STATUSES, true)) { $where[] = 'c.status = :st'; $args[':st'] = $s; }
+        if (($s = input('status')) !== '' && in_array($s, ALL_STATUSES, true)) {
+            if ($s === 'Pending') $where[] = "c.status IN ('Pending','Submitted')"; else { $where[] = 'c.status = :st'; $args[':st'] = $s; }
+        }
+        if (($cf = input_int('category_id')) > 0) { $where[] = 'c.category_id = :cat'; $args[':cat'] = $cf; }
         if (($v = input('severity')) !== '' && in_array($v, ['Minor', 'Major', 'Urgent'], true)) { $where[] = 'c.severity = :sv'; $args[':sv'] = $v; }
         if (($t = input('q')) !== '') {
-            $where[] = '(c.title LIKE :q OR c.concern_code LIKE :q OR cat.category_name LIKE :q)';
+            $where[] = "CONCAT_WS(' ', c.title, c.concern_code, cat.category_name) LIKE :q";
             $args[':q'] = '%' . addcslashes($t, '%_\\') . '%';
         }
         $w = implode(' AND ', $where);
         $from = concern_joins();
         $cst = db()->prepare("SELECT COUNT(*) $from WHERE $w"); $cst->execute($args);
         $total = (int)$cst->fetchColumn();
-        $st = db()->prepare('SELECT ' . concern_columns() . ', ' . reporter_columns() . ",
+        $st = db()->prepare('SELECT ' . concern_columns() . ', ' . reporter_columns(true) . ",
                 (SELECT a.staff_id FROM assignments a WHERE a.concern_id = c.concern_id AND a.assignment_status = 'active' LIMIT 1) AS staff_id,
                 (SELECT CONCAT(u.first_name,' ',u.last_name) FROM assignments a JOIN users u ON u.user_id = a.staff_id WHERE a.concern_id = c.concern_id AND a.assignment_status = 'active' LIMIT 1) AS staff_name
                 $from WHERE $w ORDER BY FIELD(c.severity,'Urgent','Major','Minor'), c.created_at DESC LIMIT $per OFFSET $offset");
@@ -73,7 +76,7 @@ switch ($action) {
         $rows = $st->fetchAll();
         foreach ($rows as &$r) unset($r['description']);
         $badge = [
-            'queue' => (int)db()->query("SELECT COUNT(*) FROM concerns c WHERE c.status IN ('Submitted','Under Review','Reopened') AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.concern_id = c.concern_id AND a.assignment_status = 'active')")->fetchColumn(),
+            'queue' => (int)db()->query("SELECT COUNT(*) FROM concerns c WHERE c.status IN " . CV_QUEUE_STATUSES . " AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.concern_id = c.concern_id AND a.assignment_status = 'active')")->fetchColumn(),
             'assignments' => (int)db()->query("SELECT COUNT(DISTINCT concern_id) FROM assignments WHERE assignment_status = 'active'")->fetchColumn(),
         ];
         json_out(['ok' => true, 'rows' => $rows, 'total' => $total, 'page' => $page, 'per' => $per, 'tab_counts' => $badge]);
@@ -107,14 +110,18 @@ switch ($action) {
     case 'detail': {
         $id = input_int('id');
         admin_concern($id);
-        $st = db()->prepare('SELECT ' . concern_columns() . ', ' . reporter_columns() . ' ' . concern_joins() . ' WHERE c.concern_id = :id');
+        $st = db()->prepare('SELECT ' . concern_columns() . ', ' . reporter_columns(true) . ' ' . concern_joins() . ' WHERE c.concern_id = :id');
         $st->execute([':id' => $id]);
         $c = $st->fetch();
-        $history = q("SELECT a.assigned_at, a.assignment_status, a.reason, CONCAT(u.first_name,' ',u.last_name) AS staff_name
+        if ((int)$c['is_anonymous'] && !isset($_SESSION['anon_seen'][$id])) {        // first time the admin opens it: note it once per session
+            $_SESSION['anon_seen'][$id] = true;
+            audit('anonymous_viewed', "Viewed the sender of anonymous concern {$c['concern_code']}");
+        }
+        $history = q("SELECT a.assigned_at, a.assignment_status, a.reason, (a.assigned_by IS NULL) AS auto, CONCAT(u.first_name,' ',u.last_name) AS staff_name
                       FROM assignments a JOIN users u ON u.user_id = a.staff_id WHERE a.concern_id = ? ORDER BY a.assigned_at DESC", [$id])->fetchAll();
         $fb = q('SELECT rating, comment FROM feedback WHERE concern_id = ?', [$id])->fetch();
         json_out(['ok' => true, 'concern' => $c, 'assignment' => active_assignment($id), 'history' => $history, 'feedback' => $fb ?: null,
-                  'suggested' => suggested_staff((int)$c['category_id']), 'timeline' => concern_timeline($id), 'photos' => concern_photos($id)]);
+                  'suggested' => suggested_staff((int)$c['category_id']), 'timeline' => concern_timeline($id, true), 'photos' => concern_photos($id)]);
     }
 
     case 'staff_options': {
@@ -136,7 +143,7 @@ switch ($action) {
         try {
             if ($prev) q("UPDATE assignments SET assignment_status = 'reassigned' WHERE assignment_id = ?", [$prev['assignment_id']]);
             q('INSERT INTO assignments (concern_id, staff_id, assigned_by, reason) VALUES (?,?,?,?)', [$id, $staffId, $uid, $reason ?: null]);
-            if (in_array($c['status'], ['Submitted', 'Under Review', 'Reopened'], true)) q("UPDATE concerns SET status = 'Assigned' WHERE concern_id = ?", [$id]);
+            if (in_array($c['status'], ['Submitted', 'Pending', 'Under Review', 'Reopened'], true)) q("UPDATE concerns SET status = 'Assigned' WHERE concern_id = ?", [$id]);
             add_update($id, $uid, $c['status'] === 'In Progress' ? 'In Progress' : 'Assigned', $prev ? 'Reassigned' : 'Assigned',
                 ($prev ? 'Reassigned to ' : 'Assigned to ') . display_name($staff) . ($reason ? ' — ' . $reason : '') . '.');
             $pdo->commit();
@@ -152,13 +159,15 @@ switch ($action) {
     case 'set_status': {
         $id = input_int('id'); $new = input('status'); $note = mb_substr(input('note'), 0, 500);
         $c = admin_concern($id);
-        if (!in_array($new, ['Under Review', 'Closed', 'Cancelled', 'Reopened'], true)) json_fail('Choose a valid status.');
+        if (!in_array($new, ['Under Review', 'Additional Info Needed', 'Closed', 'Cancelled', 'Reopened'], true)) json_fail('Choose a valid status.');
+        if ($new === 'Additional Info Needed' && mb_strlen($note) < 10) json_fail('Tell the student exactly what information you need (at least 10 characters).');
         if (in_array($new, ['Cancelled', 'Reopened'], true) && mb_strlen($note) < 3) json_fail('Please add a note.');
         if ($new === 'Closed') q("UPDATE concerns SET status = 'Closed', closed_at = NOW(), resolved_at = COALESCE(resolved_at, NOW()) WHERE concern_id = ?", [$id]);
         elseif ($new === 'Reopened') q("UPDATE concerns SET status = 'Reopened', resolved_at = NULL, closed_at = NULL, due_at = NOW() + INTERVAL ? HOUR WHERE concern_id = ?", [severity_hours($c['severity']), $id]);
         else q('UPDATE concerns SET status = ? WHERE concern_id = ?', [$new, $id]);
-        add_update($id, $uid, $new, 'Status Updated', $note ?: 'Status changed by the administrator.');
-        notify((int)$c['student_id'], 'Concern update', "{$c['concern_code']} is now {$new}.", $id);
+        add_update($id, $uid, $new, $new === 'Additional Info Needed' ? 'Information Requested' : 'Status Updated', $note ?: 'Status changed by the administrator.');
+        if ($new === 'Additional Info Needed') notify((int)$c['student_id'], 'More information needed', "{$c['concern_code']} — SASO asked: " . mb_substr($note, 0, 300) . ' Open the concern to reply.', $id, true);
+        else notify((int)$c['student_id'], 'Concern update', "{$c['concern_code']} is now {$new}.", $id);
         audit('concern_updated', "{$c['concern_code']} set to {$new}");
         json_out(['ok' => true, 'message' => 'Status updated.']);
     }
@@ -173,16 +182,6 @@ switch ($action) {
         notify((int)$c['student_id'], 'Concern update', "{$c['concern_code']} severity is now {$sev}.", $id);
         audit('concern_updated', "{$c['concern_code']} severity {$c['severity']} → {$sev}");
         json_out(['ok' => true, 'message' => 'Severity updated.']);
-    }
-
-    case 'reveal': {
-        $id = input_int('id'); $reason = input('reason');
-        $c = admin_concern($id);
-        if (!(int)$c['is_anonymous']) json_fail('This concern is not anonymous.');
-        if (mb_strlen($reason) < 10) json_fail('Please give a clear reason (at least 10 characters). This is recorded in the audit trail.');
-        $s = q('SELECT school_id, first_name, middle_initial, last_name, email, contact_number, course, year_level, section FROM users WHERE user_id = ?', [$c['student_id']])->fetch();
-        audit('identity_revealed', "Revealed reporter of {$c['concern_code']}. Reason: " . $reason);
-        json_out(['ok' => true, 'reporter' => ['name' => formal_name($s), 'school_id' => $s['school_id'], 'email' => $s['email'], 'contact' => $s['contact_number']]]);
     }
 
     default:

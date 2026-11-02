@@ -4,19 +4,48 @@ Plain PHP 8 + MySQL, no framework, no build step. The old Supabase prototype is 
 
 ## Demo accounts (fresh seed data)
 
-All demo accounts share one password: `CampusVoice#2026` — **change it before going live** (Settings → Change password, or Users & Staff → reset code).
+Everyone signs in with a **username** (their ID). All demo accounts share one password: `CampusVoice#2026` — **change it before going live**.
 
-| Role | Email |
+| Role | Username |
 |---|---|
-| Admin | admin@cityofmalabonuniversity.edu.ph |
-| Staff | angelica.ramos@… (IT), roberto.delapena@… (Maintenance), mario.villanueva@… (Security), jenny.mercado@… (General Services) |
-| Student | juan.delacruz@…, maria.reyes@…, paolo.santos@…, angela.garcia@… (all `@cityofmalabonuniversity.edu.ph`) |
+| Admin (SASO Director) | `ADM-0001` |
+| Staff | `STF-0102` Guidance, `STF-0103` Discipline, `STF-0104` Scholarship, `STF-0105` Student Orgs, `STF-0101` Facilities |
+| Student | `2023-0001`, `2023-0002`, `2022-0105`, `2024-0210` |
+
+## Updating an EXISTING live database (SASO update)
+
+Run once in phpMyAdmin: click your database → **SQL** tab → paste `database/upgrade-2026-11-saso.sql` → **Go**. Export a backup first.
+It keeps all users and concerns, hides the old facility categories, adds the 9 SASO types, turns public sign-up off, turns routing on and sets the 3-try / 5-minute lock.
+Then: **Campus Data → Concern types** → open each type and tick its handlers, and **Users & Staff** → set each staff member's office.
+(Fresh install instead: import `schema.sql` then `seed.sql`.)
+
+## Student accounts from a masterlist
+
+**Users & Staff → Import students** → drop the class list (.xlsx, .csv or the Word masterlist .docx) → check the preview → set Course / Year / Section → **Create accounts**.
+- Needs a *Student ID* column and a *Full name* (`LAST, FIRST MIDDLE`) or *Last name* + *First name* column. Columns like No. or Signature are ignored.
+- Username = student ID. First password = `{StudentID}@cityofmalabonuniversity.edu.ph` (or Random). Students must change it on first sign-in.
+- Existing IDs, blank IDs and duplicates are skipped and listed. Download the CSV or print sign-in slips right after; passwords cannot be shown again.
+- Template: `assets/templates/student-import-template.csv`.
+
+## Google sign-in (link / unlink)
+
+1. console.cloud.google.com → new project → **APIs & Services → OAuth consent screen** (External, app name CampusVoice, add your domain).
+2. **Credentials → Create credentials → OAuth client ID → Web application**. Authorized redirect URI: `https://campusvoice.freedev.app/google-callback.php`.
+3. In `config/config.php` → `google`: `'enabled' => true`, paste `client_id` and `client_secret`. Leave `redirect_uri` empty (auto) and keep `allowed_domain` to allow only university Google accounts (empty = any Google account).
+4. Students sign in with their username once, then **Settings → Linked accounts → Link Google**. After that "Continue with Google" works on the login page. Admins see the link status in Users & Staff.
+
+## Concern routing (who gets what)
+
+Each concern type has handlers (Campus Data). With **Settings → Concern rules → Route new concerns automatically** on, a new concern goes straight to the least-busy available handler (busy staff only if nobody is free, staff on leave never). Types without handlers — and every concern when routing is off — wait in the admin's Assignment Queue. Admins can still reassign anything.
+
+## Anonymous concerns
+Staff see only "Anonymous Student" plus course/year/section. The SASO admin sees the real sender (marked as anonymous). CSV exports stay masked.
 
 ## Run locally (XAMPP)
 
 1. Start Apache + MySQL in XAMPP and put this folder at `C:\xampp\htdocs\CampusVoice`.
 2. In phpMyAdmin import `database/schema.sql`, then `database/seed.sql`.
-3. Check `config/config.local.php` (host `localhost`, user `root`, empty password, db `campusvoice`).
+3. Check `config/config.php` (host `localhost`, user `root`, empty password, db `campusvoice`).
 4. Open `http://localhost/CampusVoice/`.
 
 ## Deploy to InfinityFree
@@ -48,17 +77,12 @@ All demo accounts share one password: `CampusVoice#2026` — **change it before 
 | Staff | Greeting once per login; Today's Work with Quick Action (Start) + “New” badge; lightbox; availability setting. |
 | Admin | Urgent-only “Needs your attention” → Notifications; Reassign moved to **Current Assignments**; **Staff Activity** tab (auto-refresh); Users table ID-first with `Surname, Firstname, MI.` for students; real audit trail with search/filters/pagination; FullCalendar; reports + CSV export; system settings. |
 
-## Anonymous concerns — how identity is protected
-- The reporter is always stored, but for staff/admin the name, student number, email and phone are **never fetched** from the database (masked in SQL). Course, year and section stay visible so staff have context.
-- Audit entries, notifications and timelines for an anonymous concern say “Anonymous Student”.
-- Only an admin can **Reveal reporter** (concern page), which requires a written reason and is itself recorded in the audit trail.
-
 ## Database changes (summary)
 New MySQL schema in `database/schema.sql`. Notable additions vs. the old Postgres schema: `concerns.severity` (Minor/Major/Urgent), `concerns.is_anonymous`, `concerns.due_at`, `assignments.seen_at` (drives the “New” badge), `users.availability`, `users.course/year_level/section`, `users.must_change_password`, `login_attempts`, `password_resets`, `audit_logs` (with IP), `events`, `settings`. `super_admin` was removed.
 
 ## Test checklist
 1. **Landing** `/` — photo slideshow cross-fades with no buttons; stats count up; Login in the nav opens `/login.php`.
-2. **Login security** — wrong password shows a generic message; 5 wrong tries lock the account for 15 min; stale session returns to login with a notice.
+2. **Login security** — sign in with a username; each wrong password shows how many tries are left; the 3rd locks sign-in for 5 minutes with a live countdown (survives a refresh).
 3. **Student** — Concerns → *New Concern* modal → submit with a photo (list refreshes without reload); tick *Send as anonymous*; open a photo (lightbox: ✕, click outside and `Esc` close it); open a resolved concern → rate, confirm or reopen.
 4. **Staff** (`angelica…`) — greeting shows once after login, not on refresh; Today's Work shows a gold “New” row with **Start**; update a concern with a proof photo.
 5. **Admin** — Dashboard shows only Urgent items and clicking opens Notifications; Concern Management → Assignment Queue → Assign; Current Assignments → Reassign; Staff Activity updates itself; Users table shows ID first and `Dela Cruz, Juan A.`; System Activity filters by date/user/action; Calendar shows deadlines, assignments, events; open the anonymous concern and try *Reveal reporter*.

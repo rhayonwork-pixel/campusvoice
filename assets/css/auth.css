@@ -40,3 +40,26 @@ body.authpage { background: var(--cream); }
 .google-btn em { font-style: normal; font-size: .6rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--gold-ink); border: 1px solid currentColor; border-radius: 3px; padding: 0 5px; }
 .google-btn[aria-disabled="true"] { cursor: not-allowed; }
 
+
+/* ---------- Login lockout: countdown ring + attempts left ---------- */
+.lock-box { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin: 0 0 16px; border-radius: 10px;
+  background: color-mix(in srgb, #b42318 7%, var(--card, #fff)); border: 1px solid color-mix(in srgb, #b42318 28%, transparent);
+  animation: lockIn .35s cubic-bezier(.2,.8,.2,1); }
+.lock-box[hidden] { display: none; }
+.lock-box strong { display: block; font-size: .95rem; color: #9a1c12; }
+.lock-box span { font-size: .86rem; color: var(--muted); }
+.lock-box b { font-variant-numeric: tabular-nums; color: var(--ink, #14213d); font-size: .95rem; }
+.lock-ring { width: 44px; height: 44px; flex: none; transform: rotate(-90deg); }
+.lock-ring circle { fill: none; stroke-width: 4; }
+.lr-track { stroke: color-mix(in srgb, #b42318 15%, transparent); }
+.lr-fill { stroke: #b42318; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: calc(1 - var(--lock-p, 1)); transition: stroke-dashoffset 1s linear; }
+#loginForm.locked .field, #loginForm.locked .cf-box { opacity: .5; pointer-events: none; }
+.tries { display: inline-flex; align-items: center; gap: 5px; font-size: .82rem; color: #9a5b00; font-weight: 600; }
+.tries[hidden] { display: none; }
+.tries i { width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 30%, transparent); }
+.tries i.on { background: var(--gold, #d9a441); }
+.tries span { margin-left: 4px; }
+.auth-note { text-align: center; font-size: .8rem; color: var(--muted); margin: 8px 0 0; }
+a.google-btn { text-decoration: none; }
+@keyframes lockIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .lock-box { animation: none; } .lr-fill { transition: none; } }

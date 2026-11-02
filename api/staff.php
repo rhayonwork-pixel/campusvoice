@@ -27,7 +27,7 @@ switch ($action) {
     case 'summary': {
         $s = q("SELECT SUM(a.assignment_status = 'active') active_total,
                        SUM(a.assignment_status = 'active' AND c.status = 'In Progress') in_progress,
-                       SUM(a.assignment_status = 'active' AND c.status = 'Waiting for Resources') waiting,
+                       SUM(a.assignment_status = 'active' AND c.status IN ('Waiting for Resources','Additional Info Needed')) waiting,
                        SUM(a.assignment_status = 'active' AND c.due_at < NOW()) overdue,
                        SUM(a.assignment_status = 'completed' AND a.completed_at > (NOW() - INTERVAL 7 DAY)) resolved_week
                 FROM assignments a JOIN concerns c ON c.concern_id = a.concern_id WHERE a.staff_id = ?", [$uid])->fetch();
@@ -52,7 +52,7 @@ switch ($action) {
         elseif ($tab === 'done') $where .= " AND a.assignment_status = 'completed'";
         if (($s = input('status')) !== '') { $where .= ' AND c.status = :st'; $args[':st'] = $s; }
         if (($v = input('severity')) !== '') { $where .= ' AND c.severity = :sv'; $args[':sv'] = $v; }
-        if (($t = input('q')) !== '') { $where .= ' AND (c.title LIKE :q OR c.concern_code LIKE :q)'; $args[':q'] = '%' . addcslashes($t, '%_\\') . '%'; }
+        if (($t = input('q')) !== '') { $where .= " AND CONCAT_WS(' ', c.title, c.concern_code) LIKE :q"; $args[':q'] = '%' . addcslashes($t, '%_\\') . '%'; }
 
         $base = staff_list_sql($where);
         $cst = db()->prepare('SELECT COUNT(*) FROM (' . $base . ') t'); $cst->execute($args);
@@ -79,7 +79,7 @@ switch ($action) {
         $a = my_assignment($id, $uid);
         $c = q('SELECT * FROM concerns WHERE concern_id = ?', [$id])->fetch();
         if ($a['assignment_status'] !== 'active') json_fail('This concern is no longer active for you.');
-        if (!in_array($c['status'], ['Assigned', 'Reopened', 'Under Review', 'Submitted'], true)) json_fail('Work has already started on this concern.');
+        if (!in_array($c['status'], ['Assigned', 'Reopened', 'Under Review', 'Submitted', 'Pending'], true)) json_fail('Work has already started on this concern.');
         q("UPDATE concerns SET status = 'In Progress' WHERE concern_id = ?", [$id]);
         q('UPDATE assignments SET seen_at = COALESCE(seen_at, NOW()) WHERE assignment_id = ?', [$a['assignment_id']]);
         add_update($id, $uid, 'In Progress', 'Work Started', display_name($u) . ' started working on this concern.');
@@ -94,7 +94,8 @@ switch ($action) {
         if ($a['assignment_status'] !== 'active') json_fail('This concern is no longer active for you.');
         $c = q('SELECT * FROM concerns WHERE concern_id = ?', [$id])->fetch();
         $new = input('status'); $note = input('note');
-        if (!in_array($new, ['In Progress', 'Waiting for Resources', 'Resolved'], true)) json_fail('Choose a valid status.');
+        if (!in_array($new, ['In Progress', 'Waiting for Resources', 'Additional Info Needed', 'Resolved'], true)) json_fail('Choose a valid status.');
+        if ($new === 'Additional Info Needed' && mb_strlen($note) < 10) json_fail('Tell the student exactly what information you need (at least 10 characters).');
         if (in_array($new, ['Resolved', 'Waiting for Resources'], true) && mb_strlen($note) < 5) json_fail('Please add a short note about what was done or what is needed.');
         if (mb_strlen($note) > 1000) json_fail('Note is too long.');
 
@@ -114,7 +115,7 @@ switch ($action) {
             }
             q('UPDATE assignments SET seen_at = COALESCE(seen_at, NOW()) WHERE assignment_id = ?', [$a['assignment_id']]);
             if ($photo) q('INSERT INTO photos (concern_id, uploaded_by, photo_type, file_path) VALUES (?,?,?,?)', [$id, $uid, 'after', $photo]);
-            add_update($id, $uid, $new, $new === 'Resolved' ? 'Resolved' : 'Status Updated', $note ?: null);
+            add_update($id, $uid, $new, $new === 'Resolved' ? 'Resolved' : ($new === 'Additional Info Needed' ? 'Information Requested' : 'Status Updated'), $note ?: null);
             $pdo->commit();
         } catch (Throwable $ex) {
             $pdo->rollBack(); if ($photo) @unlink(CV_ROOT . '/uploads/' . $photo);
@@ -122,10 +123,11 @@ switch ($action) {
             json_fail('Could not save the update.', 500);
         }
 
-        notify((int)$c['student_id'], $new === 'Resolved' ? 'Concern resolved' : 'Concern update', "{$c['concern_code']} is now {$new}." . ($new === 'Resolved' ? ' Please confirm and rate the result.' : ''), $id);
+        if ($new === 'Additional Info Needed') notify((int)$c['student_id'], 'More information needed', "{$c['concern_code']} — the office asked: " . mb_substr($note, 0, 300) . ' Open the concern to reply.', $id, true);
+        else notify((int)$c['student_id'], $new === 'Resolved' ? 'Concern resolved' : 'Concern update', "{$c['concern_code']} is now {$new}." . ($new === 'Resolved' ? ' Please confirm and rate the result.' : ''), $id);
         if ($new === 'Resolved') notify_role('admin', 'Concern resolved', "{$c['concern_code']} was marked Resolved by " . display_name($u) . '.', $id);
-        audit($new === 'Resolved' ? 'concern_resolved' : 'concern_updated', "{$c['concern_code']} set to {$new}");
-        json_out(['ok' => true, 'message' => $new === 'Resolved' ? 'Great — marked as resolved.' : 'Update saved.']);
+        audit($new === 'Resolved' ? 'concern_resolved' : ($new === 'Additional Info Needed' ? 'info_requested' : 'concern_updated'), "{$c['concern_code']} set to {$new}");
+        json_out(['ok' => true, 'message' => $new === 'Resolved' ? 'Great — marked as resolved.' : ($new === 'Additional Info Needed' ? 'The student was asked for more information.' : 'Update saved.')]);
     }
 
     default:

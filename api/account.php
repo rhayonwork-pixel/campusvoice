@@ -45,6 +45,13 @@ switch ($action) {
         json_out(['ok' => true, 'message' => 'Password updated.', 'redirect' => url(home_for($u['role']))]);
     }
 
+    case 'google_unlink': {
+        if (!$u['google_sub']) json_fail('No Google account is linked.');
+        q('UPDATE users SET google_sub = NULL, google_email = NULL, google_linked_at = NULL WHERE user_id = ?', [$uid]);
+        audit('google_unlinked', 'Unlinked Google account ' . $u['google_email']);
+        json_out(['ok' => true, 'message' => 'Google account unlinked. Sign in with your username from now on.']);
+    }
+
     case 'prefs': {
         $inapp = input('pref_notify_inapp') === '1' ? 1 : 0;
         $email = input('pref_notify_email') === '1' ? 1 : 0;

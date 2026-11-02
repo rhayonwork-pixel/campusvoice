@@ -11,29 +11,58 @@ function record_attempt(string $email, bool $success): void
     }
 }
 
-/** Minutes left on a lockout, or null when the visitor may try. */
-function lockout_minutes_left(string $email): ?int
+/** Find an account by username (school ID) or email. */
+function find_login_user(string $identifier): ?array
+{
+    $identifier = trim($identifier);
+    if ($identifier === '') return null;
+    $row = q('SELECT * FROM users WHERE school_id = ? OR (email IS NOT NULL AND email = ?) LIMIT 1', [$identifier, $identifier])->fetch();
+    return $row ?: null;
+}
+
+/** Throttle key for an identifier: one key per account, so username and email share the same counter. */
+function login_key(string $identifier, ?array $user = null): string
+{
+    $user = $user ?? find_login_user($identifier);
+    return $user ? 'uid:' . $user['user_id'] : strtolower(trim($identifier));
+}
+
+/** Failed tries left before the lock (per account key). */
+function attempts_left(string $key): int
+{
+    $c = (int)q('SELECT COUNT(*) FROM login_attempts WHERE email = ? AND success = 0 AND created_at > (NOW() - INTERVAL ? MINUTE)',
+        [$key, sec('lockout_minutes')])->fetchColumn();
+    return max(0, sec('max_failed_per_email') - $c);
+}
+
+/** Seconds left on a lockout, or null when the visitor may try. Locks last lockout_minutes from the last failed try. */
+function lockout_seconds_left(string $key): ?int
 {
     $window = sec('lockout_minutes');
-    $byEmail = q('SELECT COUNT(*) c, MAX(created_at) last FROM login_attempts WHERE email = ? AND success = 0 AND created_at > (NOW() - INTERVAL ? MINUTE)',
-        [$email, $window])->fetch();
-    $byIp = q('SELECT COUNT(*) c, MAX(created_at) last FROM login_attempts WHERE ip_address = ? AND success = 0 AND created_at > (NOW() - INTERVAL ? MINUTE)',
-        [client_ip(), $window])->fetch();
-
+    $limits = [[ 'email = ?', $key, sec('max_failed_per_email') ], [ 'ip_address = ?', client_ip(), (int)cfg('security.max_failed_per_ip') ]];
     $locked = null;
-    foreach ([[$byEmail, 'max_failed_per_email'], [$byIp, 'max_failed_per_ip']] as [$row, $limitKey]) {
-        if ((int)$row['c'] >= ($limitKey === 'max_failed_per_email' ? sec('max_failed_per_email') : (int)cfg('security.' . $limitKey))) {
-            $left = $window - (int)floor((time() - strtotime($row['last'])) / 60);
-            $locked = max($locked ?? 0, max(1, $left));
+    foreach ($limits as [$where, $val, $limit]) {
+        $row = q("SELECT COUNT(*) c, UNIX_TIMESTAMP(MAX(created_at)) last, UNIX_TIMESTAMP(NOW()) now FROM login_attempts
+                  WHERE {$where} AND success = 0 AND created_at > (NOW() - INTERVAL ? MINUTE)", [$val, $window])->fetch();
+        if ((int)$row['c'] >= $limit && $limit > 0) {
+            $left = (int)$row['last'] + $window * 60 - (int)$row['now'];
+            if ($left > 0) $locked = max($locked ?? 0, $left);
         }
     }
     return $locked;
 }
 
-/** Verify credentials without revealing whether the email exists. Returns the user row or null. */
-function verify_credentials(string $email, string $password): ?array
+/** Minutes left on a lockout (rounded up), or null. Kept for the reset forms. */
+function lockout_minutes_left(string $key): ?int
 {
-    $user = q('SELECT * FROM users WHERE email = ?', [$email])->fetch();
+    $s = lockout_seconds_left($key);
+    return $s === null ? null : (int)ceil($s / 60);
+}
+
+/** Verify credentials without revealing whether the account exists. Returns the user row or null. */
+function verify_credentials(string $identifier, string $password, ?array $user = null): ?array
+{
+    $user = $user ?? find_login_user($identifier);
     $hash = $user['password_hash'] ?? CV_DUMMY_HASH;
     $ok   = password_verify($password, $hash);
     if (!$user || !$ok) return null;
@@ -63,12 +92,12 @@ function new_reset_token(int $userId, bool $short = false): string
     return $secret;
 }
 
-/** Look up a live reset row by token (link) or by email+code. */
-function find_reset(string $secret, string $email = ''): ?array
+/** Look up a live reset row by token (link) or by username/email + code. */
+function find_reset(string $secret, string $identifier = ''): ?array
 {
-    $row = q('SELECT r.*, u.email FROM password_resets r JOIN users u ON u.user_id = r.user_id
+    $row = q('SELECT r.*, u.email, u.school_id FROM password_resets r JOIN users u ON u.user_id = r.user_id
               WHERE r.token_hash = ? AND r.used_at IS NULL AND r.expires_at > NOW()', [hash('sha256', trim($secret))])->fetch();
     if (!$row) return null;
-    if ($email !== '' && strcasecmp($row['email'], $email) !== 0) return null;
+    if ($identifier !== '' && strcasecmp($row['school_id'], $identifier) !== 0 && strcasecmp((string)$row['email'], $identifier) !== 0) return null;
     return $row;
 }

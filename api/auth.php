@@ -16,27 +16,36 @@ if (in_array($action, ['login', 'signup', 'forgot'], true) && ($captchaError = t
 switch ($action) {
 
     case 'login': {
-        $email    = strtolower(input('email'));
+        $ident    = trim(input('username') ?: input('email'));
         $password = (string)($_POST['password'] ?? '');
-        if ($email === '' || $password === '') json_fail('Please enter your email and password.');
+        if ($ident === '' || $password === '') json_fail('Please enter your username and password.');
 
-        if (($left = lockout_minutes_left($email)) !== null) {
-            audit('login_blocked', "Throttled sign-in for {$email}");
-            json_fail("Too many failed attempts. Please try again in {$left} minute" . ($left > 1 ? 's' : '') . '.', 429);
+        $found = find_login_user($ident);
+        $key   = login_key($ident, $found);
+        $max   = sec('max_failed_per_email');
+        if (($wait = lockout_seconds_left($key)) !== null) {
+            audit('login_blocked', "Locked sign-in for {$ident}");
+            json_fail('Too many failed attempts. Try again when the timer ends.', 429, ['retry_after' => $wait, 'attempts_left' => 0]);
         }
 
-        $user = verify_credentials($email, $password);
+        $user = verify_credentials($ident, $password, $found);
         if (!$user) {
-            record_attempt($email, false);
-            audit('login_failed', "Failed sign-in for {$email}");
-            json_fail('Email or password is incorrect.', 401);
+            record_attempt($key, false);
+            audit('login_failed', "Failed sign-in for {$ident}");
+            $left = attempts_left($key);
+            if ($left === 0 && ($wait = lockout_seconds_left($key)) !== null) {
+                json_fail("Too many failed attempts. Sign-in is locked for " . sec('lockout_minutes') . ' minute' . (sec('lockout_minutes') > 1 ? 's' : '') . '.', 429,
+                    ['retry_after' => $wait, 'attempts_left' => 0]);
+            }
+            json_fail('Username or password is incorrect. ' . $left . ' attempt' . ($left === 1 ? '' : 's') . ' left.', 401,
+                ['attempts_left' => $left, 'max_attempts' => $max]);
         }
         if ($user['account_status'] !== 'active') {
-            record_attempt($email, false);
+            record_attempt($key, false);
             json_fail('This account is not active. Please contact the administrator.', 403);
         }
 
-        q('DELETE FROM login_attempts WHERE email = ?', [$email]);
+        q('DELETE FROM login_attempts WHERE email = ?', [$key]);
         establish_session($user);
         audit('login', 'Signed in', $user);
         json_out(['ok' => true, 'redirect' => url(home_for($user['role']))]);
@@ -50,7 +59,7 @@ switch ($action) {
 
     case 'signup': {
         // Public sign-up creates STUDENT accounts only.
-        if (setting('student_signup', '1') !== '1') json_fail('Registration is currently closed.', 403);
+        if (setting('student_signup', '0') !== '1') json_fail('Registration is currently closed.', 403);
 
         $recent = (int)q("SELECT COUNT(*) FROM audit_logs WHERE action = 'signup' AND ip_address = ? AND created_at > (NOW() - INTERVAL 1 HOUR)", [client_ip()])->fetchColumn();
         if ($recent >= 5) json_fail('Too many registrations from this connection. Try again later.', 429);
@@ -92,20 +101,22 @@ switch ($action) {
     }
 
     case 'forgot': {
-        $email = strtolower(input('email'));
-        $generic = ['ok' => true, 'message' => 'If that email is registered, a reset link has been sent. It expires in '
-            . cfg('security.reset_token_minutes') . ' minutes. No email? Ask the administrator for a reset code.'];
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) json_out($generic);
+        $ident = trim(input('username') ?: input('email'));
+        $generic = ['ok' => true, 'message' => 'If that account has an email on file, a reset link has been sent. It expires in '
+            . cfg('security.reset_token_minutes') . ' minutes. No email? Ask the SASO admin for a reset code.'];
+        if ($ident === '' || mb_strlen($ident) > 190) json_out($generic);
 
-        if (lockout_minutes_left('reset:' . $email) !== null) json_out($generic);
-        record_attempt('reset:' . $email, false);
+        $key = 'reset:' . strtolower($ident);
+        if (lockout_minutes_left($key) !== null) json_out($generic);
+        record_attempt($key, false);
 
-        $user = q('SELECT * FROM users WHERE email = ? AND account_status = "active"', [$email])->fetch();
-        if ($user) {
+        $user = find_login_user($ident);
+        $to   = $user ? ($user['email'] ?: $user['google_email']) : null;
+        if ($user && $user['account_status'] === 'active' && $to) {
             $token = new_reset_token((int)$user['user_id']);
             $link  = base_url() . '/reset-password.php?token=' . $token;
             [$subject, $html] = email_password_reset($user, $link, (int)cfg('security.reset_token_minutes'));
-            $sent = send_mail($user['email'], $subject, $html);
+            $sent = send_mail($to, $subject, $html);
             audit('password_reset_requested', 'Reset link ' . ($sent ? 'emailed' : 'could not be emailed'), $user);
             if (cfg('app.debug')) $generic['debug_link'] = $link;     // local testing only
         }
@@ -114,12 +125,12 @@ switch ($action) {
 
     case 'reset': {
         $secret = input('token') ?: input('code');
-        $email  = strtolower(input('email'));
+        $email  = trim(input('username') ?: input('email'));
         $pw     = (string)($_POST['password'] ?? '');
         if ($pw !== (string)($_POST['password_confirm'] ?? '')) json_fail('Passwords do not match.');
         if ($p = password_problem($pw)) json_fail($p);
 
-        $key = 'resetuse:' . ($email ?: client_ip());
+        $key = 'resetuse:' . (strtolower($email) ?: client_ip());
         if (lockout_minutes_left($key) !== null) json_fail('Too many attempts. Please wait a few minutes.', 429);
 
         $row = find_reset($secret, input('token') ? '' : $email);
@@ -129,7 +140,7 @@ switch ($action) {
         }
         q('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE user_id = ?', [password_hash($pw, PASSWORD_DEFAULT), $row['user_id']]);
         q('UPDATE password_resets SET used_at = NOW() WHERE user_id = ?', [$row['user_id']]);
-        q('DELETE FROM login_attempts WHERE email = ?', [strtolower($row['email'])]);
+        q('DELETE FROM login_attempts WHERE email = ?', ['uid:' . $row['user_id']]);
         $target = q('SELECT * FROM users WHERE user_id = ?', [$row['user_id']])->fetch();
         audit('password_reset', 'Password reset completed', $target);
         json_out(['ok' => true, 'message' => 'Password updated. You can sign in now.', 'redirect' => url('login.php?reset=1')]);

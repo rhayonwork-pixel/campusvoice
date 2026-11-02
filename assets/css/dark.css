@@ -114,3 +114,20 @@ html[data-theme="dark"] { --sb-thumb: rgba(169, 195, 245, .26); --sb-thumb-hover
 
 /* dot grid (dark) */
 html[data-theme="dark"] { --dot: rgba(169, 195, 245, .09); }
+
+/* login lockout */
+[data-theme="dark"] .lock-box { background: rgba(240, 90, 80, .08); border-color: rgba(240, 90, 80, .35); }
+[data-theme="dark"] .lock-box strong { color: #ff9b91; }
+[data-theme="dark"] .lock-box b { color: #f2f4f8; }
+[data-theme="dark"] .lr-fill { stroke: #ff7a6e; }
+[data-theme="dark"] .tries { color: #f0c36b; }
+
+/* SASO flow + import (dark) */
+[data-theme="dark"] .st-Additional-Info-Needed { color: #f0c36b; }
+[data-theme="dark"] .anon-mark { color: #b7adff; }
+[data-theme="dark"] .anon-note { background: #221d4a; color: #cfc8ff; }
+[data-theme="dark"] .type-card input:checked + span i { background: #2b5cb8; }
+[data-theme="dark"] .steps li.on::before { background: #2b5cb8; border-color: #2b5cb8; }
+[data-theme="dark"] .set-link.on .set-ic { background: #2b5cb8; }
+[data-theme="dark"] .link-logo { background: #f4f6fb; }
+[data-theme="dark"] .switch::after { background: #e7edf9; }

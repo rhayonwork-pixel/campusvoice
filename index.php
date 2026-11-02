@@ -112,7 +112,7 @@ icon_sprite();
       <p>Sign in with your university account, or create a student account in a minute.</p>
       <div class="cta">
         <a class="btn btn-gold" href="<?= e(url($me ? home_for($me['role']) : 'login.php')) ?>"><?= $me ? 'Open dashboard' : 'Login' ?></a>
-        <?php if (!$me): ?><a class="btn btn-outline" href="<?= e(url('signup.php')) ?>">Create account</a><?php endif; ?>
+        <?php if (!$me && setting('student_signup', '0') === '1'): ?><a class="btn btn-outline" href="<?= e(url('signup.php')) ?>">Create account</a><?php endif; ?>
       </div>
     </div>
   </section>

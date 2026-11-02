@@ -18,7 +18,9 @@ page_head('Concern Management', 'Triage new concerns, manage assignments and wat
     <div class="card-head"><div class="toolbar" style="width:100%">
       <input class="input grow" id="fq" type="search" placeholder="Search by title, code or category" aria-label="Search">
       <select class="select" id="fstatus" aria-label="Status"><option value="">All statuses</option>
-        <?php foreach (['Submitted','Under Review','Assigned','In Progress','Waiting for Resources','Resolved','Reopened','Closed','Cancelled'] as $s) echo '<option>' . e($s) . '</option>'; ?></select>
+        <?php foreach (['Pending','Under Review','Additional Info Needed','Assigned','In Progress','Waiting for Resources','Resolved','Reopened','Closed','Cancelled'] as $s) echo '<option>' . e($s) . '</option>'; ?></select>
+      <select class="select" id="fcat" aria-label="Concern type"><option value="">All types</option>
+        <?php foreach (q('SELECT category_id, category_name FROM categories ORDER BY status = "inactive", category_name')->fetchAll() as $c) echo '<option value="' . (int)$c['category_id'] . '">' . e($c['category_name']) . '</option>'; ?></select>
       <select class="select" id="fsev" aria-label="Severity"><option value="">All severities</option><option>Minor</option><option>Major</option><option>Urgent</option></select>
     </div></div>
     <div class="table-wrap" id="listTable"><table class="tbl"><thead id="listHead"></thead><tbody></tbody></table></div>

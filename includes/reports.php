@@ -37,7 +37,7 @@ function report_data(string $from, string $to, bool $withList = false): array
     $r['list'] = [];
     if ($withList) {
         $r['list'] = q("SELECT c.concern_code, c.title, cat.category_name, CONCAT(l.building, ' · ', l.area) location, c.severity, c.status, c.created_at, c.resolved_at
-                        FROM concerns c JOIN categories cat ON cat.category_id = c.category_id JOIN locations l ON l.location_id = c.location_id
+                        FROM concerns c JOIN categories cat ON cat.category_id = c.category_id LEFT JOIN locations l ON l.location_id = c.location_id
                         WHERE c.created_at BETWEEN ? AND ? ORDER BY c.created_at ASC, c.concern_id ASC LIMIT 1000", [$from, $to])->fetchAll();
     }
     return $r;
