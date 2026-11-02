@@ -222,6 +222,30 @@ switch ($action) {
                   'message' => count($made) . ' account' . (count($made) === 1 ? '' : 's') . ' created' . ($skipped ? ", {$skipped} skipped" : '') . '.']);
     }
 
+    case 'import_xlsx': {
+        // Sign-in list from the import result (posted back by the page that just created the accounts; nothing is stored).
+        require_once __DIR__ . '/../includes/xlsx.php';
+        $list = json_decode((string)($_POST['data'] ?? ''), true);
+        if (!is_array($list) || !$list || count($list) > 600) json_fail('Nothing to download.');
+        audit('students_list_downloaded', count($list) . ' student sign-in rows downloaded');
+        $book = new XlsxBook();
+        $sh = $book->sheet('Sign-in list', [16, 36, 44, 8, 11, 44], 'D9A441');
+        $sh->add([['CampusVoice  ·  Student sign-in list', 'title']], 36, 6, 'band');
+        $sh->add([['Sign in at the CampusVoice login page with the username below. The first password must be changed at first sign-in.', 'subband']], 22, 6, 'band');
+        $sh->add([['Confidential: give each student only their own row, then delete this file.', 'sub']], 20);
+        $sh->blank(8);
+        $hr = $sh->add([['Username', 'headleft'], ['Name', 'headleft'], ['Course', 'headleft'], ['Year', 'head'], ['Section', 'head'], ['First password', 'headleft']], 28);
+        foreach (array_values($list) as $i => $c) {
+            $z = $i % 2 ? 'z' : '';
+            $sh->add([[mb_substr((string)($c['username'] ?? ''), 0, 40), 'text' . $z], [mb_substr((string)($c['name'] ?? ''), 0, 120), 'text' . $z], [mb_substr((string)($c['course'] ?? ''), 0, 80), 'text' . $z],
+                [(int)($c['year_level'] ?? 0) ?: '', 'ctr' . $z], [mb_substr((string)($c['section'] ?? ''), 0, 20), 'ctr' . $z], [mb_substr((string)($c['password'] ?? ''), 0, 120), 'text' . $z]], 24);
+        }
+        $sh->freezeRows($hr);
+        $sh->merge('A1:F1'); $sh->merge('A2:F2'); $sh->merge('A3:F3');
+        $book->download('campusvoice-sign-in-list-' . date('Ymd') . '.xlsx');
+        exit;
+    }
+
     /* ---------- campus data ---------- */
     case 'categories': {
         $rows = q('SELECT c.category_id, c.category_name, c.description, c.status, c.default_department_id, c.needs_location, c.next_steps, d.department_name,

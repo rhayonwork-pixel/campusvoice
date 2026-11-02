@@ -98,36 +98,95 @@ switch ($action) {
     }
 
     case 'export': {
-        // CSV download for the chosen period; anonymous reporters stay masked.
+        // Designed Excel report (default) or plain CSV for the chosen period. Anonymous reporters stay masked for everyone.
         [$from, $to, $label] = report_range();
-        audit('report_exported', 'Exported concerns CSV (' . $label . ')');
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename="campusvoice-concerns-' . date('Ymd') . '.csv"');
-        $out = fopen('php://output', 'w');
-        fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, ['Code', 'Title', 'Category', 'Location', 'Severity', 'Status', 'Reporter', 'Course/Year/Section', 'Submitted', 'Due', 'Resolved']);
+        $csv = input('format') === 'csv';
+        audit('report_exported', 'Exported concerns ' . ($csv ? 'CSV' : 'Excel') . ' (' . $label . ')');
         $st = db()->prepare('SELECT ' . concern_columns() . ', ' . reporter_columns() . ' ' . concern_joins() . ' WHERE c.created_at BETWEEN ? AND ? ORDER BY c.created_at DESC');
         $st->execute([$from, $to]);
-        while ($r = $st->fetch()) {
-            $clean = static fn($v) => is_string($v) && preg_match('/^[=+\-@]/', $v) ? "'" . $v : $v;   // CSV-injection guard
-            fputcsv($out, array_map($clean, [$r['concern_code'], $r['title'], $r['category_name'], $r['location'], $r['severity'], $r['status'], $r['reporter_name'], reporter_context($r), $r['created_at'], $r['due_at'], $r['resolved_at']]));
+        $rows = $st->fetchAll();
+
+        if ($csv) {
+            header('Content-Type: text/csv; charset=utf-8');
+            header('Content-Disposition: attachment; filename="campusvoice-concerns-' . date('Ymd') . '.csv"');
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, ['Code', 'Type', 'Title', 'Location', 'Severity', 'Status', 'Reporter', 'Course/Year/Section', 'Submitted', 'Due', 'Resolved']);
+            foreach ($rows as $r) {
+                $clean = function ($v) { return is_string($v) && preg_match('/^[=+\-@]/', $v) ? "'" . $v : $v; };   // CSV-injection guard
+                fputcsv($out, array_map($clean, [$r['concern_code'], $r['category_name'], $r['title'], $r['location'], $r['severity'], $r['status'], $r['reporter_name'], reporter_context($r), $r['created_at'], $r['due_at'], $r['resolved_at']]));
+            }
+            fclose($out);
+            exit;
         }
-        fclose($out);
+
+        require_once __DIR__ . '/../includes/xlsx.php';
+        $fmt = function ($d) { return $d ? date('M j, Y g:i A', strtotime($d)) : '—'; };
+        $stStyle = function ($s) {
+            if (in_array($s, ['Resolved', 'Closed'], true)) return 'st_done';
+            if (in_array($s, ['Additional Info Needed', 'Waiting for Resources'], true)) return 'st_wait';
+            if ($s === 'Reopened') return 'st_bad';
+            if ($s === 'Cancelled') return 'st_off';
+            return 'st_open';
+        };
+        $book = new XlsxBook();
+        $sh = $book->sheet('Concerns', [15, 24, 40, 28, 11, 22, 22, 26, 19, 19, 19]);
+        $sh->add([['CampusVoice  ·  Concern report', 'title']], 36, 11, 'band');
+        $sh->add([['City of Malabon University · Student Affairs and Services Office  ·  ' . $label, 'subband']], 22, 11, 'band');
+        $sh->add([['Generated ' . date('M j, Y g:i A') . '  ·  ' . count($rows) . ' concern' . (count($rows) === 1 ? '' : 's') . '  ·  anonymous senders are shown as “Anonymous Student”', 'sub']], 20);
+        $sh->blank(8);
+        $hr = $sh->add([['Code', 'headleft'], ['Type', 'headleft'], ['Title', 'headleft'], ['Location', 'headleft'], ['Severity', 'head'], ['Status', 'head'], ['Reporter', 'headleft'], ['Course · Year · Section', 'headleft'], ['Submitted', 'head'], ['Due', 'head'], ['Resolved', 'head']], 28);
+        foreach ($rows as $i => $r) {
+            $z = $i % 2 ? 'z' : '';
+            $sh->add([[$r['concern_code'], 'text' . $z], [$r['category_name'], 'text' . $z], [$r['title'], 'text' . $z], [$r['location'] ?: '—', 'text' . $z],
+                [$r['severity'], strtolower($r['severity'])], [$r['status'], $stStyle($r['status'])], [$r['reporter_name'], 'text' . $z], [reporter_context($r) ?: '—', 'text' . $z],
+                [$fmt($r['created_at']), 'ctr' . $z], [$fmt($r['due_at']), 'ctr' . $z], [$fmt($r['resolved_at']), 'ctr' . $z]], 24);
+        }
+        $sh->freezeRows($hr);
+        $sh->filter('A' . $hr . ':K' . ($hr + max(1, count($rows))));
+        $sh->merge('A1:K1'); $sh->merge('A2:K2'); $sh->merge('A3:K3');
+
+        $d = report_data($from, $to, false);
+        $sm = $d['summary'];
+        $sum = $book->sheet('Summary', [34, 14, 16, 16, 16, 16], 'D9A441');
+        $sum->add([['CampusVoice  ·  Summary', 'title']], 36, 6, 'band');
+        $sum->add([[$label, 'subband']], 22, 6, 'band');
+        $sum->blank(12);
+        $sum->add([['Total concerns', 'kpilabel'], ['Resolved', 'kpilabel'], ['Closed', 'kpilabel'], ['Overdue', 'kpilabel'], ['Anonymous', 'kpilabel'], ['Avg. rating', 'kpilabel']], 22);
+        $sum->add([[(int)$sm['total'], 'kpi'], [(int)$sm['resolved'], 'kpi'], [(int)$sm['closed'], 'kpi'], [(int)$sm['overdue'], 'kpi'], [(int)$sm['anonymous'], 'kpi'], [$d['rating']['avg_rating'] !== null ? (float)$d['rating']['avg_rating'] : '—', 'kpi']], 36);
+        $block = function ($title, $list) use ($sum) {
+            $sum->blank(14);
+            $sum->add([[$title, 'h2'], ['', 'h2']], 26);
+            if (!$list) { $sum->add([['No data in this period', 'label'], ['', 'label']], 22); return; }
+            foreach ($list as $x) $sum->add([[$x['label'], 'label'], [(int)$x['n'], 'num']], 22);
+        };
+        $block('By concern type', $d['by_category']);
+        $block('By severity', $d['by_severity']);
+        $block('By status', $d['by_status']);
+        $block('By location (campus facilities)', $d['by_location']);
+        $sum->blank(14);
+        $sum->add([['Staff · completed concerns', 'h2'], ['Count', 'h2'], ['Avg. hours', 'h2']], 26);
+        foreach ($d['staff'] as $x) $sum->add([[$x['label'], 'label'], [(int)$x['n'], 'num'], [$x['avg_hours'] !== null ? (float)$x['avg_hours'] : '—', 'num']], 22);
+        if (!$d['staff']) $sum->add([['No completed assignments in this period', 'label'], ['', 'label'], ['', 'label']], 22);
+        $sum->merge('A1:F1'); $sum->merge('A2:F2');
+
+        $book->download('campusvoice-concerns-' . date('Ymd') . '.xlsx');
         exit;
     }
 
-    /* ---------- email ---------- */
     case 'test_email': {
-        $last = null;
-        [$subject, $html] = email_test($u, cfg('smtp.enabled') ? 'Gmail SMTP (' . cfg('smtp.user') . ')' : 'PHP mail()');
+        // Sends a real test email to the admin's own address so Gmail / mail() can be checked from Settings.
+        if (!$u['email']) json_fail('Add an email address to your admin account first.');
+        $recent = (int)q("SELECT COUNT(*) FROM audit_logs WHERE action = 'email_test' AND user_id = ? AND created_at > (NOW() - INTERVAL 1 MINUTE)", [$uid])->fetchColumn();
+        if ($recent >= 3) json_fail('Please wait a minute before sending another test.', 429);
+        $via = cfg('smtp.enabled') ? 'Gmail SMTP' : 'PHP mail()';
+        [$subject, $html] = email_test($u, $via);
         $ok = send_mail($u['email'], $subject, $html);
-        $info = mail_last();
-        audit('email_test', ($ok ? 'Test email sent via ' . $info['via'] : 'Test email failed: ' . $info['error']) . ' to ' . $u['email']);
-        if ($ok) json_out(['ok' => true, 'message' => 'Test email sent to ' . $u['email'] . ' via ' . $info['via'] . '. Check the inbox (and spam).']);
-        json_fail('Could not send the test email. ' . $info['error'], 502);
+        audit('email_test', $ok ? 'Test email sent via ' . mail_last()['via'] : 'Test email failed: ' . mail_last()['error']);
+        if (!$ok) json_fail('Could not send the test email. ' . (mail_last()['error'] ?: 'Check the email settings in config/config.php.'), 502);
+        json_out(['ok' => true, 'message' => 'Test email sent to ' . $u['email'] . ' using ' . mail_last()['via'] . '. Check your inbox (and spam).']);
     }
 
-    /* ---------- system settings ---------- */
     case 'settings': {
         $keys = ['sla_minor', 'sla_major', 'sla_urgent', 'student_signup', 'auto_assign', 'signup_email_domain', 'contact_email', 'contact_address', 'sec_max_failed', 'sec_lockout_minutes', 'sec_idle_minutes'];
         $vals = [];

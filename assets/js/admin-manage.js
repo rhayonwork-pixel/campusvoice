@@ -99,11 +99,11 @@
 
     const renderPreview = () => {
       const mid = CV.$('#imMid').checked;
-      CV.$('tbody', CV.$('#imTable')).innerHTML = im.rows.map((r) => {
+      CV.$('tbody', CV.$('#imTable')).innerHTML = im.rows.map((r, idx) => {
         const n = mid ? r.split_on : r.split_off;
         const name = n[0] + ', ' + n[1] + (n[2] ? ' ' + n[2] + '.' : '');
         const extra = [r.course, r.year_level ? 'Y' + r.year_level : '', r.section].filter(Boolean).join(' · ');
-        return '<tr class="' + (r.problem ? 'bad' : '') + '"><td class="muted">' + r.line + '</td><td class="col-id">' + E(r.school_id || '—') + '</td>' +
+        return '<tr class="' + (r.problem ? 'bad' : '') + '"><td class="muted">' + (idx + 1) + '</td><td class="col-id">' + E(r.school_id || '—') + '</td>' +
           '<td><div class="cell-title">' + E(name) + '</div>' + (extra ? '<div class="cell-sub">' + E(extra) + '</div>' : '') + '</td>' +
           '<td>' + (r.problem ? '<span class="chk bad">' + ic('alert') + ' ' + E(r.problem) + '</span>' : '<span class="chk ok">' + ic('check') + ' Ready</span>') + '</td></tr>';
       }).join('');
@@ -163,6 +163,13 @@
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
       a.download = 'campusvoice-accounts-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    });
+    CV.$('#imXls').addEventListener('click', () => {
+      // the list is posted back to the server only to be turned into a designed Excel file; nothing is stored
+      const f = document.createElement('form'); f.method = 'POST'; f.action = CV.url('api/admin_users.php'); f.style.display = 'none';
+      const add = (n, v) => { const i = document.createElement('input'); i.type = 'hidden'; i.name = n; i.value = v; f.appendChild(i); };
+      add('action', 'import_xlsx'); add('_csrf', (document.querySelector('meta[name=cv-csrf]') || {}).content || ''); add('data', JSON.stringify(im.created));
+      document.body.appendChild(f); f.submit(); setTimeout(() => f.remove(), 2000);
     });
     CV.$('#imSlips').addEventListener('click', () => {
       const w = window.open('', '_blank');

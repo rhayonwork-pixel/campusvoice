@@ -127,7 +127,8 @@ $domain = setting('signup_email_domain', '') ?: 'cityofmalabonuniversity.edu.ph'
         <div><h4 id="imDoneTitle"></h4><p id="imDoneText"></p></div>
       </div>
       <div class="im-actions">
-        <button type="button" class="btn btn-outline" id="imCsv"><?= icon('download') ?> Download sign-in list (CSV)</button>
+        <button type="button" class="btn btn-primary" id="imXls"><?= icon('download') ?> Download sign-in list (Excel)</button>
+        <button type="button" class="btn btn-outline" id="imCsv"><?= icon('file') ?> CSV</button>
         <button type="button" class="btn btn-outline" id="imSlips"><?= icon('printer') ?> Print sign-in slips</button>
       </div>
       <p class="hint">Keep this list private. It is shown only now: passwords are stored encrypted and cannot be viewed again (use the key button on a user to issue a reset code).</p>

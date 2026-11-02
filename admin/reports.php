@@ -6,7 +6,8 @@ $u = require_role('admin');
 panel_open($u, 'Reports', 'reports.php', ['admin.css']);
 page_head('Reports', 'How concerns are being handled.',
     '<a class="btn btn-ghost" id="printBtn" target="_blank" rel="noopener" href="' . e(url('admin/report-print.php')) . '">' . icon('printer') . ' Print report</a>' .
-    '<a class="btn btn-ghost" id="csvBtn" href="' . e(url('api/admin_system.php?action=export')) . '">' . icon('download') . ' Export CSV</a>');
+    '<a class="btn btn-primary" id="xlsBtn" href="' . e(url('api/admin_system.php?action=export')) . '">' . icon('download') . ' Export Excel</a>' .
+    '<a class="btn btn-ghost" id="csvBtn" href="' . e(url('api/admin_system.php?action=export&format=csv')) . '">' . icon('file') . ' CSV</a>');
 ?>
 
 <section class="card rep-bar-card">
