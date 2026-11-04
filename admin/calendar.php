@@ -4,15 +4,54 @@ require __DIR__ . '/../includes/panel.php';
 $u = require_role('admin');
 
 panel_open($u, 'Calendar', 'calendar.php', ['admin.css']);
-page_head('Calendar', 'Concern deadlines, assignments and campus events.',
-    '<button class="btn btn-primary" type="button" data-open-modal="eventModal">' . icon('plus') . ' Add event</button>');
+page_head('Calendar', 'See how busy each day is. Tap a day to open its concerns.',
+    '<button class="btn btn-primary" type="button" id="addEventBtn">' . icon('plus') . ' Add event</button>');
+$cats = q('SELECT category_id, category_name FROM categories WHERE status = "active" ORDER BY category_name = "Other", category_name')->fetchAll();
 ?>
-<section class="card">
-  <div class="cal-legend" style="padding-top:16px">
-    <span><i style="background:#b42318"></i>Urgent deadline</span><span><i style="background:#b25e09"></i>Major deadline</span><span><i style="background:#0f7b4f"></i>Minor deadline</span>
-    <span><i style="background:#5440b8"></i>Assignment</span><span><i style="background:#173d7a"></i>Event</span>
+<section class="cal2" id="cal2">
+  <div class="cal-main card">
+    <div class="cal-bar">
+      <div class="cal-nav">
+        <button type="button" class="icon-btn" id="calPrev" aria-label="Previous month"><?= icon('chevL') ?></button>
+        <h2 id="calTitle">Month</h2>
+        <button type="button" class="icon-btn" id="calNext" aria-label="Next month"><?= icon('chevR') ?></button>
+        <button type="button" class="btn btn-ghost btn-sm" id="calToday">Today</button>
+      </div>
+      <div class="cal-filters">
+        <div class="seg2" id="calMode" role="radiogroup" aria-label="Show">
+          <button type="button" role="radio" data-mode="due" aria-checked="true">Due dates</button>
+          <button type="button" role="radio" data-mode="new" aria-checked="false">Submitted</button>
+        </div>
+        <select class="select" id="calCat" aria-label="Concern type"><option value="">All types</option>
+          <?php foreach ($cats as $c) echo '<option value="' . (int)$c['category_id'] . '">' . e($c['category_name']) . '</option>'; ?></select>
+      </div>
+    </div>
+
+    <div class="cal-sum" id="calSum" aria-live="polite"></div>
+
+    <div class="cal-legend2">
+      <button type="button" class="lg Urgent on" data-sev="Urgent" aria-pressed="true"><i></i>Urgent</button>
+      <button type="button" class="lg Major on" data-sev="Major" aria-pressed="true"><i></i>Major</button>
+      <button type="button" class="lg Minor on" data-sev="Minor" aria-pressed="true"><i></i>Minor</button>
+      <span class="lg-note"><span class="ev-dot"></span>Event &nbsp; <span class="late-dot"></span>Past target</span>
+    </div>
+
+    <div class="cal-grid-wrap">
+      <div class="cal-dow" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+      <div class="cal-grid" id="calGrid" role="grid" aria-label="Month"></div>
+    </div>
   </div>
-  <div class="cal-card"><div id="calendar" aria-label="Calendar"></div></div>
+
+  <aside class="cal-day card" id="calDay" aria-live="polite">
+    <div class="cd-head">
+      <div><span class="cd-kicker" id="cdKicker">Selected day</span><h3 id="cdTitle">—</h3></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="cdAdd"><?= icon('plus') ?> Event</button>
+    </div>
+    <div class="cd-counts" id="cdCounts"></div>
+    <div class="cd-events" id="cdEvents"></div>
+    <div class="cd-list" id="cdList"></div>
+    <div class="cd-more" id="cdMore" hidden><button type="button" class="btn btn-ghost btn-block" id="cdMoreBtn">Show more</button></div>
+  </aside>
 </section>
 
 <div class="modal" id="eventModal" role="dialog" aria-modal="true">
@@ -24,9 +63,4 @@ page_head('Calendar', 'Concern deadlines, assignments and campus events.',
       <div class="field"><label for="evNotes">Notes</label><input class="input" id="evNotes" name="notes" maxlength="255"></div></div>
     <div class="modal-foot"><button type="button" class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Save event</button></div></form>
 </div>
-<div class="modal" id="eventView" role="dialog" aria-modal="true">
-  <div class="modal-box sm"><div class="modal-head"><h3 id="evvTitle">Event</h3><button type="button" class="modal-x" data-close-modal aria-label="Close"><?= icon('x') ?></button></div>
-    <div class="modal-body"><p id="evvWhen" class="cell-sub"></p><p id="evvNotes" style="margin-top:8px"></p></div>
-    <div class="modal-foot"><button type="button" class="btn btn-danger" id="evvDelete"><?= icon('trash') ?> Delete</button><button type="button" class="btn btn-ghost" data-close-modal>Close</button></div></div>
-</div>
-<?php panel_close(['admin-system.js'], ['https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js']); ?>
+<?php panel_close(['admin-system.js']); ?>

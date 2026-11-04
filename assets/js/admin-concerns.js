@@ -88,6 +88,7 @@
       CV.$('#paneList').classList.toggle('on', t !== 'activity'); CV.$('#paneActivity').classList.toggle('on', t === 'activity');
       if (t === 'activity') { loadWork(); timer = setInterval(() => { if (!document.hidden) loadWork(true); }, 20000); }
       else { CV.$('#listHead').innerHTML = heads[t]; CV.$('#fstatus').parentElement.parentElement.hidden = false; tbl.first(); }
+      const onTab = CV.$('#tabs button.on'); if (onTab && onTab.scrollIntoView) onTab.scrollIntoView({ inline: 'center', block: 'nearest' });
       history.replaceState(null, '', '#' + t);
     }
 
@@ -98,9 +99,10 @@
         CV.$('tbody', CV.$('#workTable')).innerHTML = r.rows.length ? r.rows.map((s) =>
           '<tr><td><div class="cell-title">' + E(s.name) + '</div><div class="cell-sub">' + E(s.department_name || s.position || '') + '</div></td>' +
           '<td><span class="avail ' + E(s.availability) + '">' + ({ available: 'Available', busy: 'Busy', on_leave: 'On leave' }[s.availability]) + '</span></td>' +
-          '<td class="nw"><b>' + s.assigned + '</b>' + (s.overdue ? ' <span class="badge badge-over">' + s.overdue + ' overdue</span>' : '') + '</td><td class="nw">' + s.in_progress + '</td><td class="nw">' + s.pending + '</td><td class="nw">' + s.resolved + '</td>' +
+          '<td class="nw"><div class="wl-asg"><b>' + s.assigned + '</b>' + (s.overdue ? '<span class="wl-late">' + (s.overdue >= s.assigned ? 'all overdue' : s.overdue + ' overdue') + '</span>' : '') + '</div></td><td class="nw">' + s.in_progress + '</td><td class="nw">' + s.pending + '</td><td class="nw">' + s.resolved + '</td>' +
           '<td style="min-width:120px"><div class="load-bar"><i style="width:' + (s.assigned / max * 100) + '%"></i></div></td><td>' + E(s.current_status) + '</td></tr>').join('')
           : '<tr><td colspan="8"><div class="empty"><b>No staff yet</b>Add staff in Users &amp; Staff.</div></td></tr>';
+        CV.labelCells(CV.$('#workTable'));
         CV.$('#liveStamp').textContent = 'Live · updated ' + new Date().toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
       } catch (e) { if (!quiet) CV.toast(e.message, 'error'); }
     }

@@ -7,7 +7,7 @@ require_once __DIR__ . '/../includes/mail.php';
 require_once __DIR__ . '/../includes/email.php';
 
 $action = input('action');
-$reads = ['activity', 'calendar', 'reports', 'export', 'settings'];
+$reads = ['activity', 'calendar_month', 'calendar_day', 'reports', 'export', 'settings'];
 $u = api_guard(['admin'], !in_array($action, $reads, true));
 $uid = (int)$u['user_id'];
 
@@ -37,29 +37,53 @@ switch ($action) {
     }
 
     /* ---------- calendar (FullCalendar feed) ---------- */
-    case 'calendar': {
-        $start = input('start'); $end = input('end');
-        $s = preg_match('/^\d{4}-\d{2}-\d{2}/', $start) ? substr($start, 0, 10) . ' 00:00:00' : date('Y-m-01 00:00:00');
-        $e = preg_match('/^\d{4}-\d{2}-\d{2}/', $end) ? substr($end, 0, 10) . ' 23:59:59' : date('Y-m-t 23:59:59');
-        $colors = ['Minor' => '#0f7b4f', 'Major' => '#b25e09', 'Urgent' => '#b42318'];
-        $ev = [];
+    case 'calendar_month': {
+        // One cheap query per month: COUNTS per day by severity (never one row per concern), so 10 or 10,000 concerns look the same.
+        $m = input('month');
+        if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $m)) $m = date('Y-m');
+        $from = $m . '-01 00:00:00'; $to = date('Y-m-t 23:59:59', strtotime($m . '-01'));
+        $mode = input('mode') === 'new' ? 'new' : 'due';
+        $col = $mode === 'new' ? 'c.created_at' : 'c.due_at';
+        $where = "$col BETWEEN ? AND ?"; $args = [$from, $to];
+        if ($mode === 'due') $where .= ' AND c.status NOT IN ' . CV_OPEN_STATUSES;
+        if (($cat = input_int('category_id')) > 0) { $where .= ' AND c.category_id = ?'; $args[] = $cat; }
+        $days = [];
+        foreach (q("SELECT DATE($col) d, c.severity, COUNT(*) n, SUM(c.due_at < NOW() AND c.status NOT IN " . CV_OPEN_STATUSES . ") late
+                    FROM concerns c WHERE $where GROUP BY DATE($col), c.severity", $args)->fetchAll() as $r) {
+            $d = &$days[$r['d']];
+            $d['sev'][$r['severity']] = (int)$r['n'];
+            $d['late'] = ($d['late'] ?? 0) + (int)$r['late'];
+            unset($d);
+        }
+        foreach (q('SELECT DATE(start_at) d, COUNT(*) n FROM events WHERE start_at BETWEEN ? AND ? GROUP BY DATE(start_at)', [$from, $to])->fetchAll() as $r) {
+            $days[$r['d']]['ev'] = (int)$r['n'];
+        }
+        $overdueNow = (int)q('SELECT COUNT(*) FROM concerns WHERE due_at < NOW() AND status NOT IN ' . CV_OPEN_STATUSES)->fetchColumn();
+        json_out(['ok' => true, 'month' => $m, 'mode' => $mode, 'days' => $days, 'overdue_now' => $overdueNow]);
+    }
 
-        foreach (q("SELECT concern_id, concern_code, title, severity, status, due_at FROM concerns
-                    WHERE due_at BETWEEN ? AND ? AND status NOT IN " . CV_OPEN_STATUSES, [$s, $e])->fetchAll() as $r) {
-            $ev[] = ['id' => 'due-' . $r['concern_id'], 'title' => 'Due: ' . $r['concern_code'] . ' ' . $r['title'], 'start' => str_replace(' ', 'T', $r['due_at']),
-                'color' => $colors[$r['severity']], 'url' => url('admin/concern.php?id=' . $r['concern_id']), 'extendedProps' => ['kind' => 'deadline', 'severity' => $r['severity'], 'status' => $r['status']]];
-        }
-        foreach (q("SELECT a.assignment_id, a.assigned_at, c.concern_id, c.concern_code, c.title, CONCAT(u.first_name,' ',u.last_name) AS staff
-                    FROM assignments a JOIN concerns c ON c.concern_id = a.concern_id JOIN users u ON u.user_id = a.staff_id
-                    WHERE a.assigned_at BETWEEN ? AND ?", [$s, $e])->fetchAll() as $r) {
-            $ev[] = ['id' => 'asg-' . $r['assignment_id'], 'title' => $r['staff'] . ' ← ' . $r['concern_code'], 'start' => str_replace(' ', 'T', $r['assigned_at']),
-                'color' => '#5440b8', 'url' => url('admin/concern.php?id=' . $r['concern_id']), 'extendedProps' => ['kind' => 'assignment']];
-        }
-        foreach (q('SELECT * FROM events WHERE start_at BETWEEN ? AND ?', [$s, $e])->fetchAll() as $r) {
-            $ev[] = ['id' => 'evt-' . $r['event_id'], 'title' => $r['title'], 'start' => str_replace(' ', 'T', $r['start_at']), 'end' => $r['end_at'] ? str_replace(' ', 'T', $r['end_at']) : null,
-                'color' => '#173d7a', 'extendedProps' => ['kind' => 'event', 'event_id' => (int)$r['event_id'], 'notes' => $r['notes']]];
-        }
-        json_out($ev === [] ? ['ok' => true, 'events' => []] : ['ok' => true, 'events' => $ev]);
+    case 'calendar_day': {
+        $date = input('date');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || !strtotime($date)) json_fail('Choose a valid day.');
+        $mode = input('mode') === 'new' ? 'new' : 'due';
+        $col = $mode === 'new' ? 'c.created_at' : 'c.due_at';
+        $where = "DATE($col) = ?"; $args = [$date];
+        if ($mode === 'due') $where .= ' AND c.status NOT IN ' . CV_OPEN_STATUSES;
+        if (($cat = input_int('category_id')) > 0) { $where .= ' AND c.category_id = ?'; $args[] = $cat; }
+        $counts = ['Urgent' => 0, 'Major' => 0, 'Minor' => 0];
+        foreach (q("SELECT c.severity, COUNT(*) n FROM concerns c WHERE $where GROUP BY c.severity", $args)->fetchAll() as $r) $counts[$r['severity']] = (int)$r['n'];
+        $sevs = array_values(array_intersect(['Urgent', 'Major', 'Minor'], array_map('trim', explode(',', input('severity')))));
+        if ($sevs && count($sevs) < 3) { $where .= ' AND c.severity IN (' . implode(',', array_fill(0, count($sevs), '?')) . ')'; $args = array_merge($args, $sevs); }
+        [$per, $page, $offset] = paginate_params(10);
+        $total = (int)q("SELECT COUNT(*) FROM concerns c WHERE $where", $args)->fetchColumn();
+        // No reporter columns here: the calendar never needs to know who sent a concern.
+        $rows = q("SELECT c.concern_id, c.concern_code, c.title, c.severity, c.status, c.due_at, c.created_at, cat.category_name,
+                          (c.due_at < NOW() AND c.status NOT IN " . CV_OPEN_STATUSES . ") AS overdue,
+                          (SELECT CONCAT(u.first_name, ' ', u.last_name) FROM assignments a JOIN users u ON u.user_id = a.staff_id WHERE a.concern_id = c.concern_id AND a.assignment_status = 'active' LIMIT 1) AS staff_name
+                   FROM concerns c JOIN categories cat ON cat.category_id = c.category_id
+                   WHERE $where ORDER BY FIELD(c.severity,'Urgent','Major','Minor'), c.due_at ASC, c.concern_id LIMIT $per OFFSET $offset", $args)->fetchAll();
+        $events = q('SELECT event_id, title, start_at, end_at, notes FROM events WHERE DATE(start_at) = ? ORDER BY start_at', [$date])->fetchAll();
+        json_out(['ok' => true, 'date' => $date, 'mode' => $mode, 'counts' => $counts, 'total' => $total, 'page' => $page, 'per' => $per, 'rows' => $rows, 'events' => $events]);
     }
 
     case 'event_save': {

@@ -166,6 +166,22 @@
 
   /* ---------- Paginated AJAX table ---------- */
   /* cfg: { el, url, params(), row(r), cols, empty, per, onData(json) } */
+  /** Copy each header's text onto its cells (data-label) so a table can become a stack of cards on small screens. */
+  CV.labelCells = (table) => {
+    if (!table || table.dataset.nostack !== undefined) return;
+    const heads = Array.from(table.querySelectorAll('thead th')).map((h) => h.textContent.trim());
+    if (!heads.length) return;
+    table.classList.add('stack-m');
+    const wrap = table.closest('.table-wrap'); if (wrap) wrap.classList.add('stacked');
+    table.querySelectorAll('tbody tr').forEach((tr) => {
+      const cells = Array.from(tr.children);
+      if (cells.some((c) => c.hasAttribute('colspan'))) { tr.classList.add('tr-note'); return; }       // empty / error rows
+      cells.forEach((c, i) => {
+        c.setAttribute('data-label', heads[i] || '');
+        if (!(c.firstElementChild && c.firstElementChild.classList.contains('tdv'))) c.innerHTML = '<div class="tdv">' + c.innerHTML + '</div>';   // one box per cell so content wraps as a unit
+      });
+    });
+  };
   CV.table = (cfg) => {
     const host = typeof cfg.el === 'string' ? CV.$(cfg.el) : cfg.el;
     const tbody = host.querySelector('tbody');
@@ -183,6 +199,7 @@
         tbody.innerHTML = json.rows.length
           ? json.rows.map(cfg.row).join('')
           : '<tr><td colspan="' + cfg.cols + '"><div class="empty"><b>' + CV.esc((cfg.empty || {}).title || 'Nothing here yet') + '</b>' + CV.esc((cfg.empty || {}).text || '') + '</div></td></tr>';
+        CV.labelCells(host.querySelector('table'));
         renderPager(json);
         if (cfg.onData) cfg.onData(json);
       } catch (err) {
