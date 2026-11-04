@@ -883,6 +883,8 @@ body.panel .btn-outline:hover { background: color-mix(in srgb, var(--navy-2) 10%
 .nav-sub { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s var(--ease); }
 .nav-grp.open .nav-sub { grid-template-rows: 1fr; }
 .nav-sub-in { overflow: hidden; min-height: 0; display: flex; flex-direction: column; }
+.nav-grp:not(.open) .nav-sub-in { visibility: hidden; transition: visibility 0s .3s; }   /* closed group: links can't be tabbed into */
+.nav-grp.open .nav-sub-in { visibility: visible; transition: visibility 0s; }
 .nav-s { position: relative; display: flex; align-items: center; height: 38px; padding: 0 14px 0 54px; font-size: .88rem; font-weight: 500; color: #3b4b68; text-decoration: none; transition: color .2s, background .2s; }
 .nav-s::before { content: ''; position: absolute; left: 31px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: currentColor; opacity: .35; transition: opacity .2s, background .2s, transform .25s var(--ease); }
 .nav-s:hover { color: var(--navy); background: rgba(15, 42, 94, .05); }
@@ -895,3 +897,14 @@ body.panel .btn-outline:hover { background: color-mix(in srgb, var(--navy-2) 10%
 @media (prefers-reduced-motion: reduce) { .nav-sub, .nav-chev { transition: none; } }
 .count-note { margin-left: auto; font-size: .8rem; font-weight: 600; color: var(--muted); white-space: nowrap; align-self: center; }
 @media (max-width: 700px) { .count-note { flex: 1 1 100%; margin-left: 0; text-align: right; } }
+
+/* date + time pickers are wide: in a small popup they stack instead of overflowing */
+.modal-box.sm .row.two:has(input[type="datetime-local"]), #eventForm .row.two { grid-template-columns: minmax(0, 1fr); }
+input[type="datetime-local"], input[type="date"], input[type="time"] { min-width: 0; max-width: 100%; }
+.modal-box { max-width: 100%; }
+.modal-body { min-width: 0; }
+
+/* warning notices: always readable (text follows the theme; it used to stay dark brown in dark mode) */
+.note.warn { background: var(--gold-soft); color: var(--ink); }
+.note.warn b, .note.warn a, .note.warn u, .note.warn .ic { color: inherit; }
+.note.warn .ic { color: var(--gold-ink, #8a5d00); }

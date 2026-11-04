@@ -70,13 +70,17 @@
       buttonHints: { prev: 'Previous $0', next: 'Next $0', today: 'Go to today' },
       eventOrder: (a, b) => ord(a) - ord(b),
       // small month cells: just the coloured number (the legend above says which colour is which)
-      eventContent: (arg) => { const p = arg.event.extendedProps; if (p.kind === 'sum' && p.n != null && arg.view.type === 'dayGridMonth' && window.innerWidth < 700) return { html: '<span class="sum-n">' + p.n + '</span>' }; },
+      eventContent: (arg) => {
+        const p = arg.event.extendedProps;
+        if (p.kind === 'sum' && p.n != null && arg.view.type === 'dayGridMonth' && window.innerWidth < 700) return { html: '<span class="sum-n">' + p.n + '</span>' };
+        return true;                                     // everything else keeps FullCalendar's normal title text
+      },
       moreLinkClick: (i) => { openDay(i.date.toISOString().slice(0, 10)); return 'none'; },
       events: (info, ok, fail) => CV.get(S, { action: 'calendar_range', start: info.startStr, end: info.endStr, mode: st.mode, category_id: st.cat, top: st.view === 'dayGridMonth' ? 0 : 1, assign: st.asg ? 1 : 0 })
         .then((r) => ok(build(r))).catch((e) => { CV.toast(e.message, 'error'); fail(e); }),
       eventDidMount: (i) => { i.el.title = i.event.title; },                   // full text on hover when a long title is cut off
       datesSet: (i) => {
-        const relabel = () => { [['.fc-listWk-button', 'Week'], ['.fc-listMo-button', 'List']].forEach(([q, t]) => { const b = calEl.querySelector(q); if (b) b.textContent = t; }); };
+        const relabel = () => { [['.fc-listWk-button', 'Week'], ['.fc-listMo-button', 'List'], ['.fc-listMonth-button', 'List']].forEach(([q, t]) => { const b = calEl.querySelector(q); if (b) b.textContent = t; }); };
         relabel(); setTimeout(relabel, 0);                  // phone views are named by duration; give their buttons the right words
         const v = i.view.type; if (v !== st.view) { st.view = v; cal.refetchEvents(); } },
       dateClick: (i) => openDay(i.dateStr.slice(0, 10)),
@@ -93,7 +97,8 @@
       }
     });
     cal.render();
-    window.addEventListener('resize', CV.debounce(() => cal.updateSize(), 200));
+    const wasNarrow = window.innerWidth < 700;
+    window.addEventListener('resize', CV.debounce(() => { if ((window.innerWidth < 700) !== wasNarrow) location.reload(); else cal.updateSize(); }, 250));
 
     /* ----- filters ----- */
     CV.$('#calCat').addEventListener('change', (e) => { st.cat = e.target.value; cal.refetchEvents(); });
