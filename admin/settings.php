@@ -46,7 +46,7 @@ ob_start(); ?>
     </div>
     <div class="blk">
       <div class="blk-head"><span class="blk-ic"><?= icon('users') ?></span><div><h3>Student accounts</h3><p>How students get an account.</p></div></div>
-      <label class="srow"><span class="srow-t"><b>Public student sign-up</b><small>Off (recommended): accounts come from an imported masterlist in Users &amp; Staff → Import students.</small></span>
+      <label class="srow"><span class="srow-t"><b>Public student sign-up</b><small>Off (recommended): accounts come from an imported masterlist in Users → Students → Import students.</small></span>
         <input type="hidden" name="student_signup" value="0"><input type="checkbox" class="switch" name="student_signup" value="1" id="student_signup"></label>
       <div class="srow"><span class="srow-t"><b>University email domain</b><small>Used for the first password <code>{StudentID}@domain</code> and sign-up checks.</small></span>
         <input class="input wide" id="signup_email_domain" name="signup_email_domain" placeholder="cityofmalabonuniversity.edu.ph" aria-label="Email domain"></div>
@@ -101,7 +101,7 @@ ob_start(); ?>
       <button class="btn btn-primary" type="button" id="testMail"><?= icon('mail') ?> Send test email</button>
       <a class="btn btn-ghost" href="<?= e(url('admin/email-preview.php')) ?>" target="_blank" rel="noopener"><?= icon('eye') ?> Preview email</a>
     </div>
-    <p class="hint" style="margin:0">The test goes to <?= e((string)$u['email']) ?>. InfinityFree may block outgoing mail; reset codes from Users &amp; Staff always work.</p>
+    <p class="hint" style="margin:0">The test goes to <?= e((string)$u['email']) ?>. InfinityFree may block outgoing mail; reset codes from Users always work.</p>
   </div>
 </div>
 <?php $sections[] = ['id' => 'contact', 'label' => 'Contact & email', 'icon' => 'mail', 'hint' => 'Public contact, test email', 'desc' => 'What students see on the landing page, and the email sender.', 'html' => ob_get_clean()];

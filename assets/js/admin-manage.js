@@ -8,21 +8,30 @@
   if (ut) {
     const U = 'api/admin_users.php';
     const store = {};
+    const isStu = ut.dataset.group === 'students';
     // email + Google link status in one cell
     const contact = (r) => (r.email ? '<div class="cell-sub strong">' + E(r.email) + '</div>' : '<div class="cell-sub">No email</div>') +
       (r.google_email ? '<span class="g-tag on" title="Linked ' + E(CV.fmtDate(r.google_linked_at)) + '">' + ic('link') + ' ' + E(r.google_email) + '</span>'
                       : '<span class="g-tag">' + ic('unlink') + ' Google not linked</span>') +
       (+r.must_change_password ? '<span class="g-tag warn">First sign-in pending</span>' : '');
     const tbl = CV.table({
-      el: ut, url: U, cols: 7, per: 12,
-      params: () => ({ action: 'users', q: CV.$('#fq').value.trim(), role: CV.$('#frole').value, status: CV.$('#fstatus').value }),
-      empty: { title: 'No users found', text: 'Try a different search or filter.' },
+      el: ut, url: U, cols: isStu ? 6 : 7, per: 12,
+      params: () => Object.assign({ action: 'users', group: ut.dataset.group, q: CV.$('#fq').value.trim(), status: CV.$('#fstatus').value },
+        isStu ? { course: CV.$('#fcourse').value, year: CV.$('#fyear').value } : { role: CV.$('#frole').value }),
+      empty: { title: isStu ? 'No students found' : 'No staff found', text: isStu ? 'Try another filter, or use “Import students” to add a class.' : 'Try a different search or filter.' },
+      onData: (j) => {
+        CV.$('#userCount').textContent = j.total + (isStu ? ' student' : ' account') + (j.total === 1 ? '' : 's');
+        const fc = CV.$('#fcourse');                       // fill the course filter once, from the courses that really exist
+        if (fc && j.courses && fc.options.length === 1) j.courses.forEach((c) => { const o = document.createElement('option'); o.value = c; o.textContent = c; fc.appendChild(o); });
+      },
       row: (r) => {
         store[r.user_id] = r;
-        const dept = r.role === 'student' ? [r.course, r.year_level ? 'Y' + r.year_level : '', r.section].filter(Boolean).join(' · ') : (r.department_name || '—');
         // ID first, then name (students shown as Surname, Firstname, MI.)
-        return '<tr><td class="col-id">' + E(r.school_id) + '</td><td><div class="cell-title">' + E(r.display_name) + '</div><div class="cell-sub">' + E(r.position || '') + '</div></td>' +
-          '<td><span class="role-tag ' + E(r.role) + '">' + E(r.role) + '</span></td><td>' + E(dept) + '</td><td>' + contact(r) + '</td><td><span class="acct ' + E(r.account_status) + '">' + E(r.account_status) + '</span></td>' +
+        const mid = isStu
+          ? '<td><div class="cell-title">' + E(r.course || '—') + '</div><div class="cell-sub">' + E([r.year_level ? 'Year ' + r.year_level : '', r.section].filter(Boolean).join(' · ')) + '</div></td>'
+          : '<td><span class="role-tag ' + E(r.role) + '">' + E(r.role) + '</span></td><td>' + E(r.department_name || '—') + '</td>';
+        return '<tr><td class="col-id">' + E(r.school_id) + '</td><td><div class="cell-title">' + E(r.display_name) + '</div>' + (isStu ? '' : '<div class="cell-sub">' + E(r.position || '') + '</div>') + '</td>' +
+          mid + '<td>' + contact(r) + '</td><td><span class="acct ' + E(r.account_status) + '">' + E(r.account_status) + '</span></td>' +
           '<td class="nw"><div class="row-actions"><button class="btn btn-ghost btn-sm" data-edit="' + r.user_id + '" title="Edit" aria-label="Edit">' + ic('edit') + '</button>' +
           '<button class="btn btn-ghost btn-sm" data-reset="' + r.user_id + '" title="Issue reset code" aria-label="Issue reset code">' + ic('key') + '</button>' +
           '<button class="btn btn-ghost btn-sm" data-toggle="' + r.user_id + '" title="' + (r.account_status === 'active' ? 'Deactivate' : 'Activate') + '" aria-label="Toggle active">' + ic(r.account_status === 'active' ? 'lock' : 'checkCircle') + '</button>' +
@@ -30,7 +39,7 @@
       }
     });
     tbl.first();
-    ['#frole', '#fstatus'].forEach((s) => CV.$(s).addEventListener('change', () => tbl.first()));
+    ['#frole', '#fstatus', '#fcourse', '#fyear'].forEach((s) => { const el = CV.$(s); if (el) el.addEventListener('change', () => tbl.first()); });
     CV.$('#fq').addEventListener('input', CV.debounce(() => tbl.first(), 350));
 
     const form = CV.$('#userForm'), role = CV.$('#umRole');
@@ -44,7 +53,7 @@
 
     function openUser(r) {
       form.reset(); CV.$('.form-msg', form).className = 'form-msg';
-      CV.$('#umTitle').textContent = r ? 'Edit user' : 'Add user';
+      CV.$('#umTitle').textContent = r ? (isStu ? 'Edit student' : 'Edit staff / admin') : (isStu ? 'Add student' : 'Add staff / admin');
       CV.$('#umId').value = r ? r.user_id : 0;
       CV.$('#umForceWrap').hidden = !r; CV.$('#umNote').hidden = !!r;
       if (r) {
@@ -68,6 +77,7 @@
     const imStep = (n) => {
       imSteps.forEach((li, i) => { li.classList.toggle('on', i === n); li.classList.toggle('done', i < n); });
       ['#imUpload', '#imCommit', '#imDone'].forEach((sel, i) => CV.$(sel).classList.toggle('on', i === n));
+      CV.$('#importModal .modal-box').classList.toggle('fixed', n === 1);
     };
     const fileIn = CV.$('#imFile'), drop = CV.$('#imDrop');
     const pickName = () => { const f = fileIn.files[0]; CV.$('#imFileName').textContent = f ? f.name + ' · ' + Math.ceil(f.size / 1024) + ' KB' : ''; drop.classList.toggle('has', !!f); };
@@ -92,7 +102,7 @@
     };
     CV.$('#imCourse').addEventListener('input', showCollege);
     CV.$('#imCourse').addEventListener('change', showCollege);
-    CV.$('#importBtn').addEventListener('click', () => {
+    if (CV.$('#importBtn')) CV.$('#importBtn').addEventListener('click', () => {
       CV.$('#imUpload').reset(); pickName(); CV.$('.form-msg', CV.$('#imUpload')).className = 'form-msg';
       imStep(0); CV.modal.open('importModal');
     });
@@ -105,7 +115,7 @@
         const extra = [r.course, r.year_level ? 'Y' + r.year_level : '', r.section].filter(Boolean).join(' · ');
         return '<tr class="' + (r.problem ? 'bad' : '') + '"><td class="muted">' + (idx + 1) + '</td><td class="col-id">' + E(r.school_id || '—') + '</td>' +
           '<td><div class="cell-title">' + E(name) + '</div>' + (extra ? '<div class="cell-sub">' + E(extra) + '</div>' : '') + '</td>' +
-          '<td>' + (r.problem ? '<span class="chk bad">' + ic('alert') + ' ' + E(r.problem) + '</span>' : '<span class="chk ok">' + ic('check') + ' Ready</span>') + '</td></tr>';
+          '<td>' + (r.problem ? '<span class="im-chk bad">' + ic('alert') + ' ' + E(r.problem) + '</span>' : '<span class="im-chk ok">' + ic('check') + ' Ready</span>') + '</td></tr>';
       }).join('');
     };
     CV.$('#imMid').addEventListener('change', renderPreview);
@@ -228,7 +238,7 @@
       const mine = c ? c.handlers.map((h) => +h.user_id) : [];
       CV.$('#catHandlers').innerHTML = staff.length ? staff.map((s) => '<label class="handler"><input type="checkbox" name="handlers[]" value="' + s.user_id + '"' + (mine.includes(+s.user_id) ? ' checked' : '') + '>' +
         '<span><b>' + E(s.name) + '</b><small>' + E(s.department_name || 'No office') + (s.availability === 'on_leave' ? ' · on leave' : '') + '</small></span></label>').join('')
-        : '<p class="cell-sub">No active staff yet. Add staff in Users &amp; Staff.</p>';
+        : '<p class="cell-sub">No active staff yet. Add staff in Users → Staff &amp; Admins.</p>';
       if (c) { CV.$('#catName').value = c.category_name; CV.$('#catDesc').value = c.description || ''; CV.$('#catDept').value = c.default_department_id || '';
         CV.$('#catNext').value = c.next_steps || ''; CV.$('#catLoc').checked = +c.needs_location === 1; }
       CV.modal.open('catModal'); };

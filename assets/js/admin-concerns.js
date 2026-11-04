@@ -65,7 +65,7 @@
     };
     const rows = {
       queue: (r) => '<tr><td>' + titleCell(r) + '</td><td>' + reporter(r) + '</td><td>' + CV.badge.sev(r.severity) + '</td><td>' + CV.badge.st(r.status) + '</td><td class="nw">' + CV.fmtDate(r.created_at) + '</td>' +
-        '<td class="nw"><button class="btn btn-primary btn-sm" data-assign="' + r.concern_id + '">' + ic('users') + ' Assign</button> <a class="btn btn-ghost btn-sm" href="' + viewUrl(r.concern_id) + '">' + ic('eye') + '</a></td></tr>',
+        '<td class="nw"><button class="btn btn-primary btn-sm" data-assign="' + r.concern_id + '">' + ic('users') + ' Assign</button> <a class="btn btn-ghost btn-sm" href="' + viewUrl(r.concern_id) + '" aria-label="View concern" title="View concern">' + ic('eye') + '</a></td></tr>',
       assignments: (r) => '<tr><td>' + titleCell(r) + '</td><td><div class="cell-title">' + E(r.staff_name || '—') + '</div></td><td>' + CV.badge.sev(r.severity) + '</td><td>' + CV.badge.st(r.status) + '</td><td class="nw">' + CV.ui.due(r) + '</td>' +
         '<td class="nw"><button class="btn btn-ghost btn-sm" data-reassign="' + r.concern_id + '">' + ic('refresh') + ' Reassign</button> <a class="btn btn-ghost btn-sm" href="' + viewUrl(r.concern_id) + '" aria-label="View">' + ic('eye') + '</a></td></tr>',
       all: (r) => '<tr class="clickable" data-href="' + viewUrl(r.concern_id) + '"><td>' + titleCell(r) + '</td><td>' + reporter(r) + '</td><td>' + CV.badge.sev(r.severity) + '</td><td>' + CV.badge.st(r.status) + '</td><td>' + E(r.staff_name || '—') + '</td><td class="nw">' + CV.ui.due(r) + '</td></tr>'
@@ -101,7 +101,7 @@
           '<td><span class="avail ' + E(s.availability) + '">' + ({ available: 'Available', busy: 'Busy', on_leave: 'On leave' }[s.availability]) + '</span></td>' +
           '<td class="nw"><div class="wl-asg"><b>' + s.assigned + '</b>' + (s.overdue ? '<span class="wl-late">' + (s.overdue >= s.assigned ? 'all overdue' : s.overdue + ' overdue') + '</span>' : '') + '</div></td><td class="nw">' + s.in_progress + '</td><td class="nw">' + s.pending + '</td><td class="nw">' + s.resolved + '</td>' +
           '<td style="min-width:120px"><div class="load-bar"><i style="width:' + (s.assigned / max * 100) + '%"></i></div></td><td>' + E(s.current_status) + '</td></tr>').join('')
-          : '<tr><td colspan="8"><div class="empty"><b>No staff yet</b>Add staff in Users &amp; Staff.</div></td></tr>';
+          : '<tr><td colspan="8"><div class="empty"><b>No staff yet</b>Add staff in Users → Staff &amp; Admins.</div></td></tr>';
         CV.labelCells(CV.$('#workTable'));
         CV.$('#liveStamp').textContent = 'Live · updated ' + new Date().toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
       } catch (e) { if (!quiet) CV.toast(e.message, 'error'); }

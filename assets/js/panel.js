@@ -32,6 +32,12 @@
   const closeNav = () => { shell.classList.remove('open', 'peek'); label(); };
   CV.$('#scrim').addEventListener('click', closeNav);
   CV.$$('.sb-nav a').forEach((a) => a.addEventListener('click', closeNav));
+  // sidebar groups (Users → Staff & Admins / Students). In the icon-only rail there is no room to unfold, so jump to the first page.
+  CV.$$('.nav-parent').forEach((b) => b.addEventListener('click', () => {
+    if (shell.classList.contains('collapsed') && !shell.classList.contains('peek') && !mobile.matches) { location.href = b.dataset.first; return; }
+    const g = b.closest('.nav-grp'), open = !g.classList.contains('open');
+    g.classList.toggle('open', open); b.setAttribute('aria-expanded', String(open));
+  }));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNav(); });
 
   // logout via AJAX

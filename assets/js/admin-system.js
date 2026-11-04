@@ -27,7 +27,7 @@
     const SEV = ['Urgent', 'Major', 'Minor'];
     const COL = { Urgent: '#b42318', Major: '#b25e09', Minor: '#0f7b4f' };
     const ORDER = { Urgent: 1, Major: 2, Minor: 3 };
-    const st = { mode: 'due', cat: '', sev: { Urgent: true, Major: true, Minor: true }, asg: false, view: window.innerWidth < 700 ? 'listMonth' : 'dayGridMonth', sel: null, page: 1, loaded: [] };
+    const st = { mode: 'due', cat: '', sev: { Urgent: true, Major: true, Minor: true }, asg: false, view: window.innerWidth < 700 ? 'listMo' : 'dayGridMonth', sel: null, page: 1, loaded: [] };
     let selectedEvent = null;
     const nice = (s) => new Date(s + 'T00:00:00').toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' });
     const today = new Date().toISOString().slice(0, 10);
@@ -42,7 +42,7 @@
           const n = (d.sev && d.sev[k]) || 0; sums[k] += n; if (!n || !st.sev[k]) return;
           evs.push({ id: 'sum-' + k + date, start: date, allDay: true, color: COL[k], classNames: ['sum'],
             title: n + ' ' + (list ? k.toLowerCase() + ' concern' + (n > 1 ? 's' : '') + (st.mode === 'due' ? ' due' : ' submitted') : k),
-            extendedProps: { kind: 'sum', date, o: ORDER[k] } });
+            extendedProps: { kind: 'sum', date, o: ORDER[k], n } });
         });
         late += d.late || 0;
         if (st.asg && d.asg) evs.push({ id: 'asg-' + date, start: date, allDay: true, color: '#5440b8', classNames: ['sum'], title: d.asg + (list ? ' assignment' + (d.asg > 1 ? 's' : '') + ' made' : ' assigned'), extendedProps: { kind: 'sum', date, o: 4 } });
@@ -51,27 +51,34 @@
           title: t.code + ' · ' + t.title, url: CV.url('admin/concern.php?id=' + t.id), extendedProps: { kind: 'top', o: 3.5 } }));
       });
       const tot = SEV.reduce((n, k) => n + sums[k], 0);
-      CV.$('#calSum').innerHTML = '<span class="sm"><b>' + tot + '</b> ' + (st.mode === 'due' ? 'due in this view' : 'submitted in this view') + '</span>' +
-        SEV.map((k) => '<span class="sm ' + k + '"><i></i><b>' + sums[k] + '</b> ' + k + '</span>').join('') +
-        (st.mode === 'due' && late ? '<span class="sm bad"><b>' + late + '</b> past target</span>' : '') +
-        (r.overdue_now ? '<span class="sm bad"><b>' + r.overdue_now + '</b> overdue now (all months)</span>' : '');
+      CV.$('#calSum').innerHTML = '<span class="cchip"><b>' + tot + '</b> ' + (st.mode === 'due' ? 'due in this view' : 'submitted in this view') + '</span>' +
+        SEV.map((k) => '<span class="cchip ' + k + '"><i></i><b>' + sums[k] + '</b> ' + k + '</span>').join('') +
+        (st.mode === 'due' && late ? '<span class="cchip bad"><b>' + late + '</b> past target</span>' : '') +
+        (r.overdue_now ? '<span class="cchip bad"><b>' + r.overdue_now + '</b> overdue now (all months)</span>' : '');
       return evs;
     }
 
     const cal = new FullCalendar.Calendar(calEl, {
       initialView: st.view,
       height: 'auto', firstDay: 0, nowIndicator: true, dayMaxEvents: 4, navLinks: false,
-      views: { dayGridWeek: { dayMaxEvents: false } },
-      headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,dayGridWeek,listMonth' },
+      views: { dayGridWeek: { dayMaxEvents: false }, listMonth: { buttonText: 'List' }, listWk: { type: 'list', duration: { weeks: 1 }, buttonText: 'Week' }, listMo: { type: 'list', duration: { months: 1 }, buttonText: 'List' } },
+      // phones: week becomes a readable list (7 columns would be unreadably narrow)
+      headerToolbar: { left: 'prev,next today', center: 'title', right: window.innerWidth < 700 ? 'dayGridMonth,listWk,listMo' : 'dayGridMonth,dayGridWeek,listMonth' },
       // text arrows instead of FullCalendar's embedded icon font (our CSP blocks data: fonts, which left empty boxes)
       buttonIcons: false,
-      buttonText: { prev: '‹', next: '›', today: 'Today', month: 'Month', week: 'Week', list: 'List' },
+      buttonText: { prev: '‹', next: '›', today: 'Today', month: 'Month', week: 'Week' },
       buttonHints: { prev: 'Previous $0', next: 'Next $0', today: 'Go to today' },
       eventOrder: (a, b) => ord(a) - ord(b),
+      // small month cells: just the coloured number (the legend above says which colour is which)
+      eventContent: (arg) => { const p = arg.event.extendedProps; if (p.kind === 'sum' && p.n != null && arg.view.type === 'dayGridMonth' && window.innerWidth < 700) return { html: '<span class="sum-n">' + p.n + '</span>' }; },
       moreLinkClick: (i) => { openDay(i.date.toISOString().slice(0, 10)); return 'none'; },
       events: (info, ok, fail) => CV.get(S, { action: 'calendar_range', start: info.startStr, end: info.endStr, mode: st.mode, category_id: st.cat, top: st.view === 'dayGridMonth' ? 0 : 1, assign: st.asg ? 1 : 0 })
         .then((r) => ok(build(r))).catch((e) => { CV.toast(e.message, 'error'); fail(e); }),
-      datesSet: (i) => { const v = i.view.type; if (v !== st.view) { st.view = v; cal.refetchEvents(); } },
+      eventDidMount: (i) => { i.el.title = i.event.title; },                   // full text on hover when a long title is cut off
+      datesSet: (i) => {
+        const relabel = () => { [['.fc-listWk-button', 'Week'], ['.fc-listMo-button', 'List']].forEach(([q, t]) => { const b = calEl.querySelector(q); if (b) b.textContent = t; }); };
+        relabel(); setTimeout(relabel, 0);                  // phone views are named by duration; give their buttons the right words
+        const v = i.view.type; if (v !== st.view) { st.view = v; cal.refetchEvents(); } },
       dateClick: (i) => openDay(i.dateStr.slice(0, 10)),
       eventClick: (i) => {
         const p = i.event.extendedProps;
@@ -111,7 +118,7 @@
         const r = await CV.get(S, { action: 'calendar_day', date: key, mode: st.mode, category_id: st.cat, severity: sev.join(','), page: st.page, per: 10 });
         if (st.sel !== key) return;
         st.loaded = st.loaded.concat(r.rows);
-        CV.$('#dmCounts').innerHTML = SEV.map((k) => '<span class="sm ' + k + (st.sev[k] ? '' : ' off') + '"><i></i><b>' + r.counts[k] + '</b> ' + k + '</span>').join('');
+        CV.$('#dmCounts').innerHTML = SEV.map((k) => '<span class="cchip ' + k + (st.sev[k] ? '' : ' off') + '"><i></i><b>' + r.counts[k] + '</b> ' + k + '</span>').join('');
         CV.$('#dmEvents').innerHTML = r.events.map((e) => '<div class="ev-row"><span class="ev-dot"></span><div><b>' + E(e.title) + '</b><small>' + new Date(e.start_at.replace(' ', 'T')).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }) + (e.notes ? ' · ' + E(e.notes) : '') + '</small></div>' +
           '<button type="button" class="icon-btn sm" data-evdel="' + e.event_id + '" aria-label="Delete event">' + CV.ui.ic('trash') + '</button></div>').join('');
         CV.$('#dmList').innerHTML = st.loaded.length ? st.loaded.map((x) =>

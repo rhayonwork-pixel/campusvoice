@@ -23,7 +23,7 @@ function panel_nav(string $role): array
         'admin' => [
             ['dashboard.php', 'Dashboard', 'grid'],
             ['concerns.php', 'Concern Management', 'list'],
-            ['users.php', 'Users & Staff', 'users'],
+            ['users.php', 'Users', 'users', [['users.php?g=staff', 'Staff & Admins', 'user'], ['users.php?g=students', 'Students', 'users']]],
             ['campus-data.php', 'Campus Data', 'pin'],
             ['calendar.php', 'Calendar', 'calendar'],
             ['reports.php', 'Reports', 'chart'],
@@ -56,7 +56,20 @@ function panel_open(array $user, string $title, string $active, array $css = [])
     </div>
     <div class="sb-label"><?= $role === 'admin' ? 'Administration' : ($role === 'staff' ? 'My work' : 'Menu') ?></div>
     <nav class="sb-nav">
-<?php foreach (panel_nav($role) as [$file, $label, $ic]): ?>
+<?php foreach (panel_nav($role) as $item): [$file, $label, $ic] = $item; $kids = $item[3] ?? null; ?>
+<?php if ($kids):
+        $inGroup = false; foreach ($kids as $k) if ($active === $k[0]) $inGroup = true; ?>
+      <div class="nav-grp<?= $inGroup ? ' open' : '' ?>">
+        <button class="nav-i nav-parent<?= $inGroup ? ' on' : '' ?>" type="button" data-tip="<?= e($label) ?>" data-first="<?= e(url($role . '/' . $kids[0][0])) ?>" aria-expanded="<?= $inGroup ? 'true' : 'false' ?>">
+          <?= icon($ic) ?><span class="lbl"><?= e($label) ?></span><span class="nav-chev"><?= icon('chevD') ?></span>
+        </button>
+        <div class="nav-sub"><div class="nav-sub-in">
+<?php foreach ($kids as [$kfile, $klabel, $kic]): ?>
+          <a class="nav-s<?= $active === $kfile ? ' on' : '' ?>" href="<?= e(url($role . '/' . $kfile)) ?>" <?= $active === $kfile ? 'aria-current="page"' : '' ?>><span class="lbl"><?= e($klabel) ?></span></a>
+<?php endforeach; ?>
+        </div></div>
+      </div>
+<?php continue; endif; ?>
       <a class="nav-i<?= $active === $file ? ' on' : '' ?>" href="<?= e(url($role . '/' . $file)) ?>" data-tip="<?= e($label) ?>" <?= $active === $file ? 'aria-current="page"' : '' ?>>
         <?= icon($ic) ?><span class="lbl"><?= e($label) ?></span>
 <?php if ($file === 'notifications.php'): ?><span class="nav-count" id="navCount" hidden>0</span><?php endif; ?>

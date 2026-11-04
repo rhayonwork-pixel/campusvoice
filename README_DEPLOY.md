@@ -16,12 +16,12 @@ Everyone signs in with a **username** (their ID). All demo accounts share one pa
 
 Run once in phpMyAdmin: click your database → **SQL** tab → paste `database/upgrade-2026-11-saso.sql` → **Go**. Export a backup first.
 It keeps all users and concerns, hides the old facility categories, adds the 9 SASO types, turns public sign-up off, turns routing on and sets the 3-try / 5-minute lock.
-Then: **Campus Data → Concern types** → open each type and tick its handlers, and **Users & Staff** → set each staff member's office.
+Then: **Campus Data → Concern types** → open each type and tick its handlers, and **Users → Staff & Admins** → set each staff member's office.
 (Fresh install instead: import `schema.sql` then `seed.sql`.)
 
 ## Student accounts from a masterlist
 
-**Users & Staff → Import students** → drop the class list (.xlsx, .csv or the Word masterlist .docx) → check the preview → set Course / Year / Section → **Create accounts**.
+**Users → Students → Import students** → drop the class list (.xlsx, .csv or the Word masterlist .docx) → check the preview → set Course / Year / Section → **Create accounts**.
 - Needs a *Student ID* column and a *Full name* (`LAST, FIRST MIDDLE`) or *Last name* + *First name* column. Columns like No. or Signature are ignored.
 - Username = student ID. First password = `{StudentID}@cityofmalabonuniversity.edu.ph` (or Random). Students must change it on first sign-in.
 - Existing IDs, blank IDs and duplicates are skipped and listed. Download the CSV or print sign-in slips right after; passwords cannot be shown again.
@@ -72,7 +72,7 @@ Staff see only "Anonymous Student" plus course/year/section. The SASO admin sees
 6. Visit your site, sign in as admin, and change every demo password.
 
 ### InfinityFree limits to know
-- **Email:** outbound mail is restricted, so the emailed reset link may not arrive. The fallback is built in: Users & Staff → key icon → issue a one-time **reset code**, give it to the user, who enters it at *Forgot password → “Enter it here”*.
+- **Email:** outbound mail is restricted, so the emailed reset link may not arrive. The fallback is built in: Users → (Staff & Admins or Students) → key icon → issue a one-time **reset code**, give it to the user, who enters it at *Forgot password → “Enter it here”*.
 - No cron jobs: deadlines/overdue are computed when pages load; the staff workload tab and bell refresh by polling (20–60 s), which is light on hits.
 - Uploads are limited to 3 MB JPG/PNG/WebP, max 4 per concern (change in `config/config.php`).
 - FullCalendar loads from the jsDelivr CDN; the calendar needs internet access.

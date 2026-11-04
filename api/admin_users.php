@@ -40,7 +40,15 @@ switch ($action) {
     case 'users': {
         [$per, $page, $offset] = paginate_params();
         $where = ['1=1']; $args = [];
-        if (($r = input('role')) !== '' && in_array($r, ['student', 'staff', 'admin'], true)) { $where[] = 'u.role = :role'; $args[':role'] = $r; }
+        $group = input('group');                                            // 'students' or (default) 'staff' = staff + admins
+        if ($group === 'students') {
+            $where[] = "u.role = 'student'";
+            if (($y = input_int('year')) >= 1 && $y <= 6) { $where[] = 'u.year_level = :yr'; $args[':yr'] = $y; }
+            if (($cr = input('course')) !== '') { $where[] = 'u.course = :course'; $args[':course'] = $cr; }
+        } elseif ($group === 'staff') {
+            $where[] = "u.role IN ('staff','admin')";
+            if (($r = input('role')) !== '' && in_array($r, ['staff', 'admin'], true)) { $where[] = 'u.role = :role'; $args[':role'] = $r; }
+        } elseif (($r = input('role')) !== '' && in_array($r, ['student', 'staff', 'admin'], true)) { $where[] = 'u.role = :role'; $args[':role'] = $r; }
         if (($s = input('status')) !== '' && in_array($s, ['active', 'inactive', 'suspended'], true)) { $where[] = 'u.account_status = :st'; $args[':st'] = $s; }
         if (($t = input('q')) !== '') {
             $where[] = "CONCAT_WS(' ', u.school_id, u.first_name, u.last_name, u.email, u.google_email) LIKE :q";
@@ -59,7 +67,8 @@ switch ($action) {
             // Students: "Surname, Firstname, MI."   Others: "Firstname M. Surname"
             $r['display_name'] = $r['role'] === 'student' ? formal_name($r) : display_name($r);
         }
-        json_out(['ok' => true, 'rows' => $rows, 'total' => $total, 'page' => $page, 'per' => $per]);
+        $courses = $group === 'students' ? q("SELECT DISTINCT course FROM users WHERE role = 'student' AND course IS NOT NULL AND course <> '' ORDER BY course")->fetchAll(PDO::FETCH_COLUMN) : [];
+        json_out(['ok' => true, 'rows' => $rows, 'total' => $total, 'page' => $page, 'per' => $per, 'courses' => $courses]);
     }
 
     case 'user_save': {

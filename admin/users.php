@@ -3,20 +3,35 @@ require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/panel.php';
 $u = require_role('admin');
 
-panel_open($u, 'Users & Staff', 'users.php', ['admin.css']);
-page_head('Users & Staff', 'Create accounts, assign roles and manage access. Students sign in with their student ID.',
-    '<button class="btn btn-outline" type="button" id="importBtn">' . icon('upload') . ' Import students</button>'
-    . '<button class="btn btn-primary" type="button" id="addUser">' . icon('plus') . ' Add user</button>');
+// Two focused views of the same list: staff + admins, or students (so a big import never mixes in with staff)
+$group = ($_GET['g'] ?? '') === 'students' ? 'students' : 'staff';
+$isStu = $group === 'students';
+panel_open($u, $isStu ? 'Students' : 'Staff & Admins', 'users.php?g=' . $group, ['admin.css']);
+page_head($isStu ? 'Students' : 'Staff & Admins',
+    $isStu ? 'Students sign in with their student ID. Import a class masterlist to create many accounts at once.'
+           : 'Staff handle concerns and admins run the system. They sign in with their staff ID.',
+    ($isStu ? '<button class="btn btn-outline" type="button" id="importBtn">' . icon('upload') . ' Import students</button>' : '')
+    . '<button class="btn btn-primary" type="button" id="addUser">' . icon('plus') . ($isStu ? ' Add student' : ' Add staff / admin') . '</button>');
 $domain = setting('signup_email_domain', '') ?: 'cityofmalabonuniversity.edu.ph';
 ?>
-<section class="card" id="userTable">
+<section class="card" id="userTable" data-group="<?= e($group) ?>">
   <div class="card-head"><div class="toolbar" style="width:100%">
-    <input class="input grow" id="fq" type="search" placeholder="Search by username, name or email" aria-label="Search users">
-    <select class="select" id="frole" aria-label="Role"><option value="">All roles</option><option value="student">Students</option><option value="staff">Staff</option><option value="admin">Admins</option></select>
+    <input class="input grow" id="fq" type="search" placeholder="Search by username, name or email" aria-label="Search">
+<?php if ($isStu): ?>
+    <select class="select" id="fcourse" aria-label="Course"><option value="">All courses</option></select>
+    <select class="select" id="fyear" aria-label="Year"><option value="">All years</option><?php for ($i = 1; $i <= 5; $i++) echo "<option value=\"$i\">Year $i</option>"; ?></select>
+<?php else: ?>
+    <select class="select" id="frole" aria-label="Role"><option value="">Staff &amp; admins</option><option value="staff">Staff only</option><option value="admin">Admins only</option></select>
+<?php endif; ?>
     <select class="select" id="fstatus" aria-label="Status"><option value="">Any status</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="suspended">Suspended</option></select>
+    <span class="count-note" id="userCount" aria-live="polite"></span>
   </div></div>
   <div class="table-wrap"><table class="tbl">
-    <thead><tr><th class="nw">Username</th><th>Name</th><th>Role</th><th>Department / Course</th><th>Email &amp; Google</th><th>Status</th><th class="nw" style="text-align:right">Actions</th></tr></thead>
+<?php if ($isStu): ?>
+    <thead><tr><th class="nw">Username</th><th>Name</th><th>Course · Year · Section</th><th>Email &amp; Google</th><th>Status</th><th class="nw" style="text-align:right">Actions</th></tr></thead>
+<?php else: ?>
+    <thead><tr><th class="nw">Username</th><th>Name</th><th>Role</th><th>Office</th><th>Email &amp; Google</th><th>Status</th><th class="nw" style="text-align:right">Actions</th></tr></thead>
+<?php endif; ?>
     <tbody></tbody></table></div>
   <div class="pager"></div>
 </section>
@@ -28,7 +43,7 @@ $domain = setting('signup_email_domain', '') ?: 'cityofmalabonuniversity.edu.ph'
       <div class="form-msg" role="alert"></div>
       <input type="hidden" name="user_id" id="umId" value="0">
       <div class="row two">
-        <div class="field"><label for="umRole">Role</label><select class="select" id="umRole" name="role"><option value="student">Student</option><option value="staff">Staff</option><option value="admin">Admin</option></select></div>
+        <div class="field"<?= $isStu ? ' hidden' : '' ?>><label for="umRole">Role</label><select class="select" id="umRole" name="role"><?php if ($isStu): ?><option value="student">Student</option><?php else: ?><option value="staff">Staff</option><option value="admin">Admin</option><?php endif; ?></select></div>
         <div class="field"><label for="umSid">Username (ID number)</label><input class="input" id="umSid" name="school_id" maxlength="30" required></div>
       </div>
       <div class="row three">
@@ -71,7 +86,7 @@ $domain = setting('signup_email_domain', '') ?: 'cityofmalabonuniversity.edu.ph'
 <div class="modal" id="importModal" role="dialog" aria-modal="true" aria-labelledby="imTitle">
   <div class="modal-box lg">
     <div class="modal-head"><h3 id="imTitle">Import students</h3><button type="button" class="modal-x" data-close-modal aria-label="Close"><?= icon('x') ?></button></div>
-    <ol class="steps" id="imSteps" aria-label="Import progress"><li class="on">Upload</li><li>Check</li><li>Done</li></ol>
+    <ol class="im-steps" id="imSteps" aria-label="Import progress"><li class="on">Upload</li><li>Check</li><li>Done</li></ol>
 
     <!-- step 1: upload -->
     <form class="modal-body im-pane on" id="imUpload" novalidate>
