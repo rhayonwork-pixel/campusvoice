@@ -7,7 +7,7 @@ require_once __DIR__ . '/../includes/mail.php';
 require_once __DIR__ . '/../includes/email.php';
 
 $action = input('action');
-$reads = ['activity', 'calendar_month', 'calendar_day', 'reports', 'export', 'settings'];
+$reads = ['activity', 'calendar_range', 'calendar_day', 'reports', 'export', 'settings'];
 $u = api_guard(['admin'], !in_array($action, $reads, true));
 $uid = (int)$u['user_id'];
 
@@ -37,29 +37,42 @@ switch ($action) {
     }
 
     /* ---------- calendar (FullCalendar feed) ---------- */
-    case 'calendar_month': {
-        // One cheap query per month: COUNTS per day by severity (never one row per concern), so 10 or 10,000 concerns look the same.
-        $m = input('month');
-        if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $m)) $m = date('Y-m');
-        $from = $m . '-01 00:00:00'; $to = date('Y-m-t 23:59:59', strtotime($m . '-01'));
+    case 'calendar_range': {
+        // What FullCalendar asks for: counts per day by severity (never one row per concern), campus events, and
+        // for week/list views the few most urgent concerns of each day. 10 or 10,000 concerns cost the same.
+        $start = input('start'); $end = input('end');
+        $from = preg_match('/^\d{4}-\d{2}-\d{2}/', $start) ? substr($start, 0, 10) . ' 00:00:00' : date('Y-m-01 00:00:00');
+        $to   = preg_match('/^\d{4}-\d{2}-\d{2}/', $end) ? substr($end, 0, 10) . ' 00:00:00' : date('Y-m-t 23:59:59');
+        if (strtotime($to) - strtotime($from) > 70 * 86400) $to = date('Y-m-d 00:00:00', strtotime($from) + 70 * 86400);
         $mode = input('mode') === 'new' ? 'new' : 'due';
         $col = $mode === 'new' ? 'c.created_at' : 'c.due_at';
-        $where = "$col BETWEEN ? AND ?"; $args = [$from, $to];
+        $where = "$col >= ? AND $col < ?"; $args = [$from, $to];
         if ($mode === 'due') $where .= ' AND c.status NOT IN ' . CV_OPEN_STATUSES;
         if (($cat = input_int('category_id')) > 0) { $where .= ' AND c.category_id = ?'; $args[] = $cat; }
         $days = [];
         foreach (q("SELECT DATE($col) d, c.severity, COUNT(*) n, SUM(c.due_at < NOW() AND c.status NOT IN " . CV_OPEN_STATUSES . ") late
                     FROM concerns c WHERE $where GROUP BY DATE($col), c.severity", $args)->fetchAll() as $r) {
-            $d = &$days[$r['d']];
-            $d['sev'][$r['severity']] = (int)$r['n'];
-            $d['late'] = ($d['late'] ?? 0) + (int)$r['late'];
-            unset($d);
+            $days[$r['d']]['sev'][$r['severity']] = (int)$r['n'];
+            $days[$r['d']]['late'] = ($days[$r['d']]['late'] ?? 0) + (int)$r['late'];
         }
-        foreach (q('SELECT DATE(start_at) d, COUNT(*) n FROM events WHERE start_at BETWEEN ? AND ? GROUP BY DATE(start_at)', [$from, $to])->fetchAll() as $r) {
-            $days[$r['d']]['ev'] = (int)$r['n'];
+        if (input_int('top') > 0) {                                    // week / list: up to 3 urgent concerns per day
+            $seen = [];
+            foreach (q("SELECT c.concern_id, c.concern_code, c.title, DATE($col) d, $col AS at FROM concerns c
+                        WHERE $where AND c.severity = 'Urgent' ORDER BY $col LIMIT 400", $args)->fetchAll() as $r) {
+                if (($seen[$r['d']] = ($seen[$r['d']] ?? 0) + 1) > 3) continue;
+                $days[$r['d']]['top'][] = ['id' => (int)$r['concern_id'], 'code' => $r['concern_code'], 'title' => $r['title'], 'at' => str_replace(' ', 'T', $r['at'])];
+            }
+        }
+        if (input('assign') === '1') {                                 // optional purple "assigned" counts
+            foreach (q('SELECT DATE(assigned_at) d, COUNT(*) n FROM assignments WHERE assigned_at >= ? AND assigned_at < ? GROUP BY DATE(assigned_at)', [$from, $to])->fetchAll() as $r) $days[$r['d']]['asg'] = (int)$r['n'];
+        }
+        $events = [];
+        foreach (q('SELECT * FROM events WHERE start_at >= ? AND start_at < ? ORDER BY start_at LIMIT 300', [$from, $to])->fetchAll() as $r) {
+            $events[] = ['id' => 'evt-' . $r['event_id'], 'title' => $r['title'], 'start' => str_replace(' ', 'T', $r['start_at']), 'end' => $r['end_at'] ? str_replace(' ', 'T', $r['end_at']) : null,
+                'color' => '#173d7a', 'extendedProps' => ['kind' => 'event', 'event_id' => (int)$r['event_id'], 'notes' => $r['notes']]];
         }
         $overdueNow = (int)q('SELECT COUNT(*) FROM concerns WHERE due_at < NOW() AND status NOT IN ' . CV_OPEN_STATUSES)->fetchColumn();
-        json_out(['ok' => true, 'month' => $m, 'mode' => $mode, 'days' => $days, 'overdue_now' => $overdueNow]);
+        json_out(['ok' => true, 'mode' => $mode, 'days' => $days, 'events' => $events, 'overdue_now' => $overdueNow]);
     }
 
     case 'calendar_day': {

@@ -1,4 +1,4 @@
-/* Admin: audit trail, calendar (counts per day + day panel), reports. */
+/* Admin: audit trail, calendar (FullCalendar showing per-day counts), reports. */
 (function () {
   'use strict';
   const E = CV.esc, S = 'api/admin_system.php';
@@ -21,129 +21,124 @@
     ['#ftype', '#ffrom', '#fto'].forEach((s) => CV.$(s).addEventListener('change', () => tbl.first()));
   }
 
-  /* ---------- calendar: counts per day (never one chip per concern) + a paged day panel ---------- */
-  const calGrid = CV.$('#calGrid');
-  if (calGrid) {
+  /* ---------- calendar: FullCalendar, but it is fed COUNTS per day (never one bar per concern) ---------- */
+  const calEl = CV.$('#calendar');
+  if (calEl && window.FullCalendar) {
     const SEV = ['Urgent', 'Major', 'Minor'];
-    const st = { month: new Date(), sel: null, mode: 'due', cat: '', sev: { Urgent: true, Major: true, Minor: true }, days: {}, page: 1, loaded: [] };
-    st.month.setDate(1);
-    const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    const ym = (d) => iso(d).slice(0, 7);
-    const today = iso(new Date());
+    const COL = { Urgent: '#b42318', Major: '#b25e09', Minor: '#0f7b4f' };
+    const ORDER = { Urgent: 1, Major: 2, Minor: 3 };
+    const st = { mode: 'due', cat: '', sev: { Urgent: true, Major: true, Minor: true }, asg: false, view: window.innerWidth < 700 ? 'listMonth' : 'dayGridMonth', sel: null, page: 1, loaded: [] };
+    let selectedEvent = null;
     const nice = (s) => new Date(s + 'T00:00:00').toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' });
-    const dayTotal = (d) => d ? SEV.reduce((n, k) => n + (st.sev[k] ? (d.sev && d.sev[k]) || 0 : 0), 0) : 0;
-    let reqId = 0;
+    const today = new Date().toISOString().slice(0, 10);
+    const ord = (e) => { const p = (e && e.extendedProps) || {}; return p.o != null ? p.o : 9; };
 
-    async function loadMonth() {
-      const my = ++reqId;
-      calGrid.setAttribute('aria-busy', 'true');
-      try {
-        const r = await CV.get(S, { action: 'calendar_month', month: ym(st.month), mode: st.mode, category_id: st.cat });
-        if (my !== reqId) return;
-        st.days = r.days; st.overdueNow = r.overdue_now;
-        drawGrid();
-      } catch (e) { CV.toast(e.message, 'error'); }
-      calGrid.removeAttribute('aria-busy');
+    function build(r) {
+      const list = st.view.indexOf('list') === 0, evs = r.events.map((e) => Object.assign(e, { extendedProps: Object.assign({ o: 0 }, e.extendedProps) }));
+      let sums = { Urgent: 0, Major: 0, Minor: 0 }, late = 0;
+      Object.keys(r.days).forEach((date) => {
+        const d = r.days[date];
+        SEV.forEach((k) => {
+          const n = (d.sev && d.sev[k]) || 0; sums[k] += n; if (!n || !st.sev[k]) return;
+          evs.push({ id: 'sum-' + k + date, start: date, allDay: true, color: COL[k], classNames: ['sum'],
+            title: n + ' ' + (list ? k.toLowerCase() + ' concern' + (n > 1 ? 's' : '') + (st.mode === 'due' ? ' due' : ' submitted') : k),
+            extendedProps: { kind: 'sum', date, o: ORDER[k] } });
+        });
+        late += d.late || 0;
+        if (st.asg && d.asg) evs.push({ id: 'asg-' + date, start: date, allDay: true, color: '#5440b8', classNames: ['sum'], title: d.asg + (list ? ' assignment' + (d.asg > 1 ? 's' : '') + ' made' : ' assigned'), extendedProps: { kind: 'sum', date, o: 4 } });
+        // week + list: the few most urgent concerns of the day, by name
+        if (st.sev.Urgent && (st.view === 'dayGridWeek' || list) && d.top) d.top.forEach((t) => evs.push({ id: 'top-' + t.id, start: t.at, allDay: true, color: '#b42318', textColor: '#b42318', classNames: ['top'],
+          title: t.code + ' · ' + t.title, url: CV.url('admin/concern.php?id=' + t.id), extendedProps: { kind: 'top', o: 3.5 } }));
+      });
+      const tot = SEV.reduce((n, k) => n + sums[k], 0);
+      CV.$('#calSum').innerHTML = '<span class="sm"><b>' + tot + '</b> ' + (st.mode === 'due' ? 'due in this view' : 'submitted in this view') + '</span>' +
+        SEV.map((k) => '<span class="sm ' + k + '"><i></i><b>' + sums[k] + '</b> ' + k + '</span>').join('') +
+        (st.mode === 'due' && late ? '<span class="sm bad"><b>' + late + '</b> past target</span>' : '') +
+        (r.overdue_now ? '<span class="sm bad"><b>' + r.overdue_now + '</b> overdue now (all months)</span>' : '');
+      return evs;
     }
 
-    function drawGrid() {
-      CV.$('#calTitle').textContent = st.month.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
-      const first = new Date(st.month), startOffset = first.getDay();
-      const daysIn = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
-      const cells = Math.ceil((startOffset + daysIn) / 7) * 7;
-      const totals = Object.keys(st.days).map((k) => dayTotal(st.days[k]));
-      const max = Math.max(1, ...totals);
-      let html = '', sumAll = 0, sumSev = { Urgent: 0, Major: 0, Minor: 0 }, late = 0;
-      for (let i = 0; i < cells; i++) {
-        const n = i - startOffset + 1;
-        if (n < 1 || n > daysIn) { html += '<div class="cd out" aria-hidden="true"></div>'; continue; }
-        const d = new Date(first.getFullYear(), first.getMonth(), n), key = iso(d), info = st.days[key] || {};
-        const tot = dayTotal(info), level = tot ? Math.min(4, Math.ceil(tot / max * 4)) : 0;
-        SEV.forEach((k) => { sumSev[k] += (info.sev && info.sev[k]) || 0; });
-        sumAll += (info.sev ? SEV.reduce((a, k) => a + (info.sev[k] || 0), 0) : 0); late += info.late || 0;
-        const chips = SEV.filter((k) => st.sev[k] && info.sev && info.sev[k]).map((k) => '<span class="chip-s ' + k + '"><i></i><b>' + info.sev[k] + '</b><em>' + k + '</em></span>').join('');
-        const label = nice(key) + (tot ? ': ' + SEV.filter((k) => info.sev && info.sev[k]).map((k) => info.sev[k] + ' ' + k).join(', ') : ': nothing') + (info.ev ? ', ' + info.ev + ' event' : '');
-        html += '<button type="button" class="cd day' + (key === today ? ' today' : '') + (key === st.sel ? ' sel' : '') + (tot || info.ev ? ' has' : '') + '" data-d="' + key + '" data-l="' + level + '" role="gridcell" aria-label="' + E(label) + '">' +
-          '<span class="dn">' + n + '</span>' + ((info.ev) ? '<span class="ev-dot" title="' + info.ev + ' event"></span>' : '') + ((info.late && st.mode === 'due') ? '<span class="late-dot" title="Past target"></span>' : '') +
-          '<span class="chips">' + chips + '</span></button>';
+    const cal = new FullCalendar.Calendar(calEl, {
+      initialView: st.view,
+      height: 'auto', firstDay: 0, nowIndicator: true, dayMaxEvents: 4, navLinks: false,
+      views: { dayGridWeek: { dayMaxEvents: false } },
+      headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,dayGridWeek,listMonth' },
+      // text arrows instead of FullCalendar's embedded icon font (our CSP blocks data: fonts, which left empty boxes)
+      buttonIcons: false,
+      buttonText: { prev: '‹', next: '›', today: 'Today', month: 'Month', week: 'Week', list: 'List' },
+      buttonHints: { prev: 'Previous $0', next: 'Next $0', today: 'Go to today' },
+      eventOrder: (a, b) => ord(a) - ord(b),
+      moreLinkClick: (i) => { openDay(i.date.toISOString().slice(0, 10)); return 'none'; },
+      events: (info, ok, fail) => CV.get(S, { action: 'calendar_range', start: info.startStr, end: info.endStr, mode: st.mode, category_id: st.cat, top: st.view === 'dayGridMonth' ? 0 : 1, assign: st.asg ? 1 : 0 })
+        .then((r) => ok(build(r))).catch((e) => { CV.toast(e.message, 'error'); fail(e); }),
+      datesSet: (i) => { const v = i.view.type; if (v !== st.view) { st.view = v; cal.refetchEvents(); } },
+      dateClick: (i) => openDay(i.dateStr.slice(0, 10)),
+      eventClick: (i) => {
+        const p = i.event.extendedProps;
+        if (p.kind === 'sum') { i.jsEvent.preventDefault(); return openDay(p.date); }
+        if (i.event.url) return;                              // an urgent concern link opens normally
+        if (p.kind === 'event') {
+          i.jsEvent.preventDefault(); selectedEvent = p.event_id;
+          CV.$('#evvTitle').textContent = i.event.title;
+          CV.$('#evvWhen').textContent = i.event.start.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
+          CV.$('#evvNotes').textContent = p.notes || ''; CV.modal.open('eventView');
+        }
       }
-      calGrid.innerHTML = html;
-      const lateTxt = st.mode === 'due' && late ? '<span class="sm bad"><b>' + late + '</b> past target</span>' : '';
-      CV.$('#calSum').innerHTML = '<span class="sm"><b>' + sumAll + '</b> ' + (st.mode === 'due' ? 'due this month' : 'submitted this month') + '</span>' +
-        SEV.map((k) => '<span class="sm ' + k + '"><i></i><b>' + sumSev[k] + '</b> ' + k + '</span>').join('') + lateTxt +
-        (st.overdueNow ? '<span class="sm bad"><b>' + st.overdueNow + '</b> overdue now (all months)</span>' : '');
-    }
+    });
+    cal.render();
+    window.addEventListener('resize', CV.debounce(() => cal.updateSize(), 200));
 
-    /* ----- day panel ----- */
+    /* ----- filters ----- */
+    CV.$('#calCat').addEventListener('change', (e) => { st.cat = e.target.value; cal.refetchEvents(); });
+    CV.$$('#calMode button').forEach((b) => b.addEventListener('click', () => {
+      st.mode = b.dataset.mode; CV.$$('#calMode button').forEach((x) => x.setAttribute('aria-checked', String(x === b))); cal.refetchEvents();
+    }));
+    CV.$$('.lgi[data-sev]').forEach((b) => b.addEventListener('click', () => {
+      st.sev[b.dataset.sev] = !st.sev[b.dataset.sev]; b.classList.toggle('on', st.sev[b.dataset.sev]); b.setAttribute('aria-pressed', String(st.sev[b.dataset.sev])); cal.refetchEvents();
+    }));
+    const asgBtn = CV.$('.lgi[data-asg]');
+    asgBtn.addEventListener('click', () => { st.asg = !st.asg; asgBtn.classList.toggle('on', st.asg); asgBtn.setAttribute('aria-pressed', String(st.asg)); cal.refetchEvents(); });
+
+    /* ----- a day's concerns (paged, urgent first) ----- */
     async function openDay(key, more) {
       st.sel = key;
-      CV.$$('.cd.day', calGrid).forEach((b) => b.classList.toggle('sel', b.dataset.d === key));
-      if (!more) { st.page = 1; st.loaded = []; CV.$('#cdList').innerHTML = '<div class="skel" style="height:56px"></div><div class="skel" style="height:56px;margin-top:8px"></div>'; }
+      if (!more) { st.page = 1; st.loaded = []; CV.$('#dmList').innerHTML = '<div class="skel" style="height:56px"></div><div class="skel" style="height:56px;margin-top:8px"></div>'; CV.modal.open('dayModal'); }
       else st.page++;
-      CV.$('#cdTitle').textContent = nice(key);
-      CV.$('#cdKicker').textContent = (key === today ? 'Today · ' : '') + (st.mode === 'due' ? 'Due on this day' : 'Submitted on this day');
+      CV.$('#dmTitle').textContent = nice(key);
+      CV.$('#dmKicker').textContent = (key === today ? 'Today · ' : '') + (st.mode === 'due' ? 'Due on this day' : 'Submitted on this day');
       try {
         const sev = SEV.filter((k) => st.sev[k]);
         const r = await CV.get(S, { action: 'calendar_day', date: key, mode: st.mode, category_id: st.cat, severity: sev.join(','), page: st.page, per: 10 });
         if (st.sel !== key) return;
         st.loaded = st.loaded.concat(r.rows);
-        CV.$('#cdCounts').innerHTML = SEV.map((k) => '<span class="sm ' + k + (st.sev[k] ? '' : ' off') + '"><i></i><b>' + r.counts[k] + '</b> ' + k + '</span>').join('');
-        CV.$('#cdEvents').innerHTML = r.events.map((e) => '<div class="ev-row"><span class="ev-dot"></span><div><b>' + E(e.title) + '</b><small>' + new Date(e.start_at.replace(' ', 'T')).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }) + (e.notes ? ' · ' + E(e.notes) : '') + '</small></div>' +
+        CV.$('#dmCounts').innerHTML = SEV.map((k) => '<span class="sm ' + k + (st.sev[k] ? '' : ' off') + '"><i></i><b>' + r.counts[k] + '</b> ' + k + '</span>').join('');
+        CV.$('#dmEvents').innerHTML = r.events.map((e) => '<div class="ev-row"><span class="ev-dot"></span><div><b>' + E(e.title) + '</b><small>' + new Date(e.start_at.replace(' ', 'T')).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }) + (e.notes ? ' · ' + E(e.notes) : '') + '</small></div>' +
           '<button type="button" class="icon-btn sm" data-evdel="' + e.event_id + '" aria-label="Delete event">' + CV.ui.ic('trash') + '</button></div>').join('');
-        CV.$('#cdList').innerHTML = st.loaded.length ? st.loaded.map((x) =>
+        CV.$('#dmList').innerHTML = st.loaded.length ? st.loaded.map((x) =>
           '<a class="cd-item ' + x.severity + '" href="' + CV.url('admin/concern.php?id=' + x.concern_id) + '"><span class="bar"></span><div class="ci-main"><b>' + E(x.title) + '</b>' +
           '<span>' + E(x.concern_code) + ' · ' + E(x.category_name) + (x.staff_name ? ' · ' + E(x.staff_name) : ' · <u>unassigned</u>') + '</span></div>' +
           '<div class="ci-end">' + CV.badge.st(x.status) + (+x.overdue ? '<em class="late">Past target</em>' : '') + '</div></a>').join('')
           : '<div class="empty sm"><b>Nothing here</b>' + (r.events.length ? 'Only events on this day.' : 'No concerns ' + (st.mode === 'due' ? 'are due' : 'were submitted') + ' on this day.') + '</div>';
         const shown = (st.page - 1) * 10 + r.rows.length;
-        CV.$('#cdMore').hidden = shown >= r.total;
-        CV.$('#cdMoreBtn').textContent = 'Show more (' + (r.total - shown) + ' left)';
-        CV.$('#cdTitle').dataset.date = key;
+        CV.$('#dmMore').hidden = shown >= r.total;
+        CV.$('#dmMoreBtn').textContent = 'Show more (' + (r.total - shown) + ' left)';
       } catch (e) { CV.toast(e.message, 'error'); }
     }
-
-    calGrid.addEventListener('click', (e) => {
-      const b = e.target.closest('.cd.day'); if (!b) return;
-      openDay(b.dataset.d);
-      if (window.innerWidth < 1100) CV.$('#calDay').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    CV.$('#cdMoreBtn').addEventListener('click', () => openDay(st.sel, true));
-    const go = (delta) => { st.month = new Date(st.month.getFullYear(), st.month.getMonth() + delta, 1); loadMonth(); };
-    CV.$('#calPrev').addEventListener('click', () => go(-1));
-    CV.$('#calNext').addEventListener('click', () => go(1));
-    CV.$('#calToday').addEventListener('click', () => { st.month = new Date(); st.month.setDate(1); loadMonth().then(() => openDay(today)); });
-    CV.$('#calCat').addEventListener('change', (e) => { st.cat = e.target.value; loadMonth(); if (st.sel) openDay(st.sel); });
-    CV.$$('#calMode button').forEach((b) => b.addEventListener('click', () => {
-      st.mode = b.dataset.mode; CV.$$('#calMode button').forEach((x) => x.setAttribute('aria-checked', String(x === b))); loadMonth(); if (st.sel) openDay(st.sel);
-    }));
-    CV.$$('.cal-legend2 .lg').forEach((b) => b.addEventListener('click', () => {
-      st.sev[b.dataset.sev] = !st.sev[b.dataset.sev]; b.classList.toggle('on', st.sev[b.dataset.sev]); b.setAttribute('aria-pressed', String(st.sev[b.dataset.sev]));
-      drawGrid(); if (st.sel) openDay(st.sel);
-    }));
-    // keyboard: arrows move between days
-    calGrid.addEventListener('keydown', (e) => {
-      const keys = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }; if (!(e.key in keys)) return;
-      const all = CV.$$('.cd.day', calGrid), i = all.indexOf(document.activeElement); if (i < 0) return;
-      const t = all[i + keys[e.key]]; if (t) { e.preventDefault(); t.focus(); }
-    });
-
-    /* events */
-    const openEvent = (date) => {
-      CV.$('#eventForm').reset();
-      const d = date || st.sel || today; CV.$('#evStart').value = d + 'T09:00';
-      CV.modal.open('eventModal');
-    };
-    CV.$('#addEventBtn').addEventListener('click', () => openEvent());
-    CV.$('#cdAdd').addEventListener('click', () => openEvent(st.sel));
-    CV.bindForm(CV.$('#eventForm'), { url: S, action: 'event_save', busy: 'Saving…', noRedirect: true,
-      success: () => { CV.toast('Event added.'); CV.modal.close('eventModal'); loadMonth(); if (st.sel) openDay(st.sel); } });
-    CV.$('#cdEvents').addEventListener('click', async (e) => {
+    CV.$('#dmMoreBtn').addEventListener('click', () => openDay(st.sel, true));
+    CV.$('#dmAdd').addEventListener('click', () => { CV.modal.close('dayModal'); CV.$('#eventForm').reset(); CV.$('#evStart').value = st.sel + 'T09:00'; CV.modal.open('eventModal'); });
+    CV.$('#dmEvents').addEventListener('click', async (e) => {
       const b = e.target.closest('[data-evdel]'); if (!b || !confirm('Delete this event?')) return;
-      try { await CV.post(S, { action: 'event_delete', event_id: b.dataset.evdel }); CV.toast('Event removed.'); loadMonth(); openDay(st.sel); } catch (x) { CV.toast(x.message, 'error'); }
+      try { await CV.post(S, { action: 'event_delete', event_id: b.dataset.evdel }); CV.toast('Event removed.'); cal.refetchEvents(); openDay(st.sel); } catch (x) { CV.toast(x.message, 'error'); }
     });
 
-    loadMonth().then(() => openDay(today));
-  }
+    /* ----- events ----- */
+    CV.bindForm(CV.$('#eventForm'), { url: S, action: 'event_save', busy: 'Saving…', noRedirect: true,
+      success: () => { CV.toast('Event added.'); CV.modal.close('eventModal'); CV.$('#eventForm').reset(); cal.refetchEvents(); } });
+    CV.$('#evvDelete').addEventListener('click', async () => {
+      if (!selectedEvent || !confirm('Delete this event?')) return;
+      try { await CV.post(S, { action: 'event_delete', event_id: selectedEvent }); CV.modal.close('eventView'); cal.refetchEvents(); CV.toast('Event removed.'); } catch (e) { CV.toast(e.message, 'error'); }
+    });
+  } else if (calEl) { calEl.innerHTML = '<div class="empty"><b>Calendar could not load</b>Check your internet connection and refresh.</div>'; }
 
   /* ---------- reports ---------- */
   if (CV.$('#rTotal')) {

@@ -901,3 +901,28 @@ body.panel .btn-outline:hover { background: color-mix(in srgb, var(--navy-2) 10%
   .card-head .toolbar .input.grow, .card-head .toolbar .input[type="search"] { flex: 1 1 100%; width: 100%; }
   .card-head .toolbar .select { flex: 1 1 calc(50% - 8px); min-width: 0; width: auto; }
 }
+
+/* =====================================================================
+   Calendar (FullCalendar) fed with per-day summaries
+   ===================================================================== */
+.cal-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px 24px 0; }
+.cal-legend-tog { padding: 0; gap: 8px; }
+.lgi { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); font-size: .8rem; font-weight: 600; color: var(--ink); cursor: pointer; transition: opacity .2s, background .2s; }
+.lgi i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin: 0; }
+.lgi:not(.on):not(.static) { opacity: .45; }
+.lgi:not(.static):hover { background: var(--bg); }
+.lgi.static { cursor: default; }
+.cal-top + .cal-sum { padding-top: 12px; }
+.fc .fc-event.sum { cursor: pointer; font-weight: 700; font-size: .76rem; padding: 1px 7px; border: 0; }
+.fc .fc-event.sum .fc-event-title { padding: 0; }
+.fc .fc-daygrid-event.top { background: var(--bad-bg); color: var(--bad); border: 0; padding: 1px 7px; font-weight: 600; }
+.fc .fc-daygrid-event.top .fc-event-title { color: var(--bad); }
+.fc .fc-daygrid-event.top .fc-event-main { color: var(--bad); }
+.fc .fc-dayGridWeek-view .fc-daygrid-day-frame { min-height: 260px; }
+.fc .fc-daygrid-day { cursor: pointer; }
+.fc .fc-list-event.sum, .fc .fc-list-event.top { cursor: pointer; }
+.fc .fc-list-event:hover td { background: var(--bg); }
+@media (max-width: 700px) {
+  .cal-top { padding: 14px 16px 0; }
+  .cal-top .cal-filters { width: 100%; }
+}
