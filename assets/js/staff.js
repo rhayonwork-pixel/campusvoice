@@ -112,4 +112,59 @@
     }
     load();
   }
+
+  /* ---------- my calendar (meetings + due dates) ---------- */
+  if (CV.$('#scGrid')) {
+    const grid = CV.$('#scGrid'), items = CV.$('#scItems'), head = CV.$('#scSideHead'), title = CV.$('#scTitle');
+    const pad = (n) => String(n).padStart(2, '0'), iso = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    const todayIso = iso(new Date());
+    const when = (at) => new Date(String(at).replace(' ', 'T'));
+    const day = (at) => String(at).slice(0, 10);
+    const vlab = { scheduled: ['Waiting for the student', 'st-Pending'], confirmed: ['Student will come', 'st-Resolved'], reschedule: ['Wants another time', 'st-Additional-Info-Needed'], attended: ['Attended', 'st-Closed'], no_show: ['Did not come', 'st-Reopened'] };
+    let cur = new Date(); cur.setDate(1); cur.setHours(0, 0, 0, 0);
+    let sel = null, vis = [], due = [];
+
+    const link = (id) => CV.url('staff/concern.php?id=' + id);
+    function visitItem(v) {
+      const d = when(v.scheduled_at), l = vlab[v.status] || ['', ''], needs = ['scheduled', 'confirmed'].includes(v.status) && d < new Date();
+      return '<a class="mc-item" href="' + link(v.concern_id) + '"><span class="vc-cal sm"><small>' + E(d.toLocaleDateString('en-PH', { month: 'short' })) + '</small><b>' + d.getDate() + '</b></span>' +
+        '<div class="mc-main"><b>' + E(d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })) + ' · ' + E(v.place) + '</b><span class="mc-sub">' + E(v.concern_code) + ' · ' + E(v.title) + (+v.is_anonymous ? ' · Anonymous' : '') + '</span>' +
+        '<span class="mc-acts"><span class="badge ' + l[1] + '">' + l[0] + '</span>' + (needs ? '<span class="badge badge-over">Record the result</span>' : '') + '</span></div></a>';
+    }
+    function dueItem(c) {
+      return '<a class="mc-item" href="' + link(c.concern_id) + '"><span class="vc-cal sm mc-duecal"><small>Due</small><b>' + when(c.due_at).getDate() + '</b></span>' +
+        '<div class="mc-main"><b>' + E(c.title) + '</b><span class="mc-sub">' + E(c.concern_code) + (+c.is_anonymous ? ' · Anonymous' : '') + '</span>' +
+        '<span class="mc-acts"><span class="badge sev-' + E(c.severity) + '">' + E(c.severity) + '</span>' + (+c.overdue ? '<span class="badge badge-over">Past due</span>' : '') + '</span></div></a>';
+    }
+
+    function draw() {
+      title.textContent = cur.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+      const vBy = {}, dBy = {};
+      vis.forEach((v) => (vBy[day(v.scheduled_at)] = vBy[day(v.scheduled_at)] || []).push(v));
+      due.forEach((c) => (dBy[day(c.due_at)] = dBy[day(c.due_at)] || []).push(c));
+      const days = new Date(cur.getFullYear(), cur.getMonth() + 1, 0).getDate();
+      let h = '<span></span>'.repeat(cur.getDay());
+      for (let n = 1; n <= days; n++) {
+        const k = cur.getFullYear() + '-' + pad(cur.getMonth() + 1) + '-' + pad(n), v = vBy[k] || [], d = dBy[k] || [];
+        h += '<button type="button" class="mc-day' + (k === todayIso ? ' is-today' : '') + (k === sel ? ' is-sel' : '') + (v.length || d.length ? ' has' : '') + '" data-d="' + k + '">' + n +
+          '<span class="mc-dots">' + (v.length ? '<i class="mc-d mc-ok"></i>' : '') + (d.length ? '<i class="mc-d ' + (d.some((c) => +c.overdue) ? 'mc-late' : 'mc-wait') + '"></i>' : '') + '</span></button>';
+      }
+      grid.innerHTML = h;
+      const lv = sel ? (vBy[sel] || []) : vis.filter((v) => day(v.scheduled_at) >= todayIso && !['attended', 'no_show'].includes(v.status));
+      const ld = sel ? (dBy[sel] || []) : due.filter((c) => day(c.due_at) >= todayIso || +c.overdue);
+      head.textContent = sel ? when(sel + ' 00:00:00').toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' }) : 'Coming up this month';
+      items.innerHTML = (lv.length ? '<div class="mc-sec">Meetings</div>' + lv.map(visitItem).join('') : '') + (ld.length ? '<div class="mc-sec">Due dates</div>' + ld.map(dueItem).join('') : '') ||
+        '<div class="mc-none">' + (sel ? 'Nothing on this day.' : 'Nothing coming up this month.') + '</div>';
+    }
+    async function load() {
+      const last = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
+      try { const r = await CV.get('api/staff.php', { action: 'calendar_month', start: iso(cur), end: iso(last) }); vis = r.visits; due = r.due; }
+      catch (e) { CV.toast(e.message, 'error'); vis = []; due = []; }
+      draw();
+    }
+    grid.addEventListener('click', (e) => { const b = e.target.closest('.mc-day'); if (!b) return; sel = sel === b.dataset.d ? null : b.dataset.d; draw(); });
+    CV.$('#scPrev').addEventListener('click', () => { cur.setMonth(cur.getMonth() - 1); sel = null; load(); });
+    CV.$('#scNext').addEventListener('click', () => { cur.setMonth(cur.getMonth() + 1); sel = null; load(); });
+    load();
+  }
 })();

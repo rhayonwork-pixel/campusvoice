@@ -16,6 +16,7 @@ function panel_nav(string $role): array
         'staff' => [
             ['dashboard.php', 'Dashboard', 'home'],
             ['concerns.php', 'My Assignments', 'briefcase'],
+            ['calendar.php', 'My Calendar', 'calendar'],
             ['notifications.php', 'Notifications', 'bell'],
             ['help.php', 'Help & Support', 'help'],
             ['settings.php', 'Settings', 'settings'],

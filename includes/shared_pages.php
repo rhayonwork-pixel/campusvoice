@@ -90,7 +90,7 @@ function render_settings_page(array $u, array $systemSections = [], array $extra
     $first = $force ? 'security' : 'profile';
     ?>
 <?php if ($force): ?>
-<section class="note warn"><?= icon('lock') ?><div><b>Please change your password.</b> You are using a first-time or temporary password. Set your own to continue.</div></section>
+<section class="note warn"><?= icon('lock') ?><div><b>Please change your password.</b> You are using a first-time or temporary password, so the other pages stay closed until you save a new one below. It takes a few seconds, then you go straight to your dashboard.</div></section>
 <?php endif; ?>
 <section class="set-shell" id="settingsShell" data-first="<?= e($first) ?>">
   <nav class="set-nav" role="tablist" aria-label="Settings sections">

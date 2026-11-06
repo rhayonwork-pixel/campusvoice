@@ -984,3 +984,11 @@ input[type="datetime-local"], input[type="date"], input[type="time"] { min-width
 .mc-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
 .mc-none { padding: 16px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: .88rem; text-align: center; }
 @media (max-width: 760px) { .mc-wrap { grid-template-columns: 1fr; padding: 14px; } }
+
+.mc-late { background: #b42318; }
+.mc-dots { position: absolute; bottom: 5px; left: 0; right: 0; display: flex; justify-content: center; gap: 3px; }
+.mc-dots .mc-d { position: static; transform: none; }
+.mc-sec { font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 4px 0 -2px; }
+a.mc-item:hover { border-color: var(--navy); }
+.mc-sub { font-size: .84rem; color: var(--muted); overflow-wrap: anywhere; }
+.mc-duecal { background: color-mix(in srgb, var(--gold) 20%, var(--card)); color: #7a5200; }

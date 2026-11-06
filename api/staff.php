@@ -5,7 +5,7 @@ require __DIR__ . '/../includes/upload.php';
 require __DIR__ . '/../includes/visits.php';
 
 $action = input('action');
-$u = api_guard(['staff'], !in_array($action, ['summary', 'today', 'list', 'detail', 'visits'], true));
+$u = api_guard(['staff'], !in_array($action, ['summary', 'today', 'list', 'detail', 'visits', 'calendar_month'], true));
 $uid = (int)$u['user_id'];
 
 /** Assignment row for this staff member on a concern, or stop. */
@@ -74,6 +74,23 @@ switch ($action) {
         $visits = visit_rows($id);
         json_out(['ok' => true, 'concern' => $st->fetch(), 'assignment_status' => $a['assignment_status'], 'visit' => visit_active($visits), 'visits' => $visits,
                   'timeline' => concern_timeline($id), 'photos' => concern_photos($id)]);
+    }
+
+    /** My calendar: my meetings and the due dates of my open concerns, for one month. No student names. */
+    case 'calendar_month': {
+        $start = input('start'); $end = input('end');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $start) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $end)) json_fail('Invalid dates.');
+        $visits = q("SELECT v.visit_id, v.concern_id, v.scheduled_at, v.place, v.status, c.concern_code, c.title, c.is_anonymous
+                     FROM visits v JOIN concerns c ON c.concern_id = v.concern_id
+                     WHERE EXISTS (SELECT 1 FROM assignments a WHERE a.concern_id = c.concern_id AND a.staff_id = ? AND a.assignment_status IN ('active','completed'))
+                       AND v.status <> 'cancelled' AND v.scheduled_at >= ? AND v.scheduled_at < ? + INTERVAL 1 DAY
+                     ORDER BY v.scheduled_at", [$uid, $start, $end])->fetchAll();
+        $due = q("SELECT c.concern_id, c.concern_code, c.title, c.severity, c.status, c.due_at, c.is_anonymous, (c.due_at < NOW()) AS overdue
+                  FROM concerns c
+                  WHERE EXISTS (SELECT 1 FROM assignments a WHERE a.concern_id = c.concern_id AND a.staff_id = ? AND a.assignment_status = 'active')
+                    AND c.status NOT IN ('Resolved','Closed','Cancelled') AND c.due_at >= ? AND c.due_at < ? + INTERVAL 1 DAY
+                  ORDER BY c.due_at", [$uid, $start, $end])->fetchAll();
+        json_out(['ok' => true, 'visits' => $visits, 'due' => $due]);
     }
 
     case 'visits': {
