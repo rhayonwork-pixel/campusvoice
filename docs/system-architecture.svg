@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 560" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1f2d5c"/></marker>
+  </defs>
+  <rect width="1040" height="560" fill="#ffffff"/>
+  <text x="40" y="50" font-size="24" font-weight="bold" fill="#1f2d5c">CampusVoice System Architecture</text>
+  <rect x="40" y="62" width="56" height="4" rx="2" fill="#d4a53a"/>
+
+  <!-- four main boxes -->
+  <g fill="#ffffff" stroke="#1f2d5c" stroke-width="2">
+    <rect x="40" y="110" width="180" height="210" rx="12"/>
+    <rect x="300" y="110" width="180" height="210" rx="12"/>
+    <rect x="560" y="110" width="200" height="210" rx="12"/>
+    <rect x="840" y="110" width="160" height="210" rx="12"/>
+  </g>
+
+  <!-- icon: users -->
+  <g transform="translate(130,165)">
+    <circle r="36" fill="#e8ecf7"/>
+    <circle cx="-11" cy="-8" r="8" fill="#1f2d5c"/><path d="M-26 16a15 13 0 0130 0z" fill="#1f2d5c"/>
+    <circle cx="12" cy="-10" r="9" fill="#d4a53a"/><path d="M-4 18a16 15 0 0132 0z" fill="#d4a53a"/>
+  </g>
+  <!-- icon: browser -->
+  <g transform="translate(390,165)">
+    <circle r="36" fill="#e8ecf7"/>
+    <rect x="-22" y="-17" width="44" height="34" rx="4" fill="#fff" stroke="#1f2d5c" stroke-width="2.5"/>
+    <path d="M-22 -8H22" stroke="#1f2d5c" stroke-width="2.5"/>
+    <circle cx="-16" cy="-12.5" r="1.8" fill="#d4a53a"/><circle cx="-10" cy="-12.5" r="1.8" fill="#d4a53a"/>
+    <path d="M-13 1h18M-13 8h11" stroke="#1f2d5c" stroke-width="2.2" stroke-linecap="round"/>
+  </g>
+  <!-- icon: server -->
+  <g transform="translate(660,165)">
+    <circle r="36" fill="#e8ecf7"/>
+    <rect x="-20" y="-19" width="40" height="16" rx="3" fill="#1f2d5c"/>
+    <rect x="-20" y="2" width="40" height="16" rx="3" fill="#1f2d5c"/>
+    <circle cx="12" cy="-11" r="2.3" fill="#d4a53a"/><circle cx="12" cy="10" r="2.3" fill="#d4a53a"/>
+    <path d="M-14 -11h12M-14 10h12" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+  </g>
+  <!-- icon: database -->
+  <g transform="translate(920,165)">
+    <circle r="36" fill="#e8ecf7"/>
+    <path d="M-18 -14v28c0 5 8 8 18 8s18-3 18-8v-28" fill="#1f2d5c"/>
+    <path d="M-18 0c0 5 8 8 18 8s18-3 18-8" fill="none" stroke="#e8ecf7" stroke-width="2"/>
+    <ellipse cx="0" cy="-14" rx="18" ry="7" fill="#d4a53a"/>
+  </g>
+
+  <g font-size="16" font-weight="bold" fill="#1f2d5c" text-anchor="middle">
+    <text x="130" y="228">Users</text>
+    <text x="390" y="228">Web Browser</text>
+    <text x="660" y="228">Web Server</text>
+    <text x="920" y="228">Database</text>
+  </g>
+  <g font-size="13" fill="#555" text-anchor="middle">
+    <text x="130" y="254">Student · Staff · Admin</text>
+    <text x="130" y="274">phone, tablet or PC</text>
+    <text x="390" y="254">HTML · CSS · JavaScript</text>
+    <text x="390" y="274">plus FullCalendar</text>
+    <text x="660" y="254">PHP 8 on InfinityFree</text>
+    <text x="660" y="274">pages and api files</text>
+    <text x="920" y="254">MySQL</text>
+    <text x="920" y="274">+ uploaded photos</text>
+  </g>
+
+  <!-- arrows between boxes -->
+  <g stroke="#1f2d5c" stroke-width="2" fill="none">
+    <path d="M220 190H298" marker-end="url(#a)"/><path d="M298 240H222" marker-end="url(#a)"/>
+    <path d="M480 190H558" marker-end="url(#a)"/><path d="M558 240H482" marker-end="url(#a)"/>
+    <path d="M760 190H838" marker-end="url(#a)"/><path d="M838 240H762" marker-end="url(#a)"/>
+  </g>
+  <g font-size="12" fill="#1f2d5c" text-anchor="middle">
+    <text x="260" y="181">uses</text><text x="260" y="258">sees</text>
+    <text x="520" y="181">request</text><text x="520" y="258">page / data</text>
+    <text x="800" y="181">query</text><text x="800" y="258">results</text>
+  </g>
+
+  <!-- outside services -->
+  <path d="M660 320V372" stroke="#1f2d5c" stroke-width="2" fill="none" marker-start="url(#a)"/>
+  <path d="M440 372H880M440 372V396M660 372V396M880 372V396" stroke="#1f2d5c" stroke-width="2" fill="none"/>
+  <g fill="#f6f7fb" stroke="#c9cfe0" stroke-width="1.5">
+    <rect x="350" y="396" width="180" height="72" rx="10"/>
+    <rect x="570" y="396" width="180" height="72" rx="10"/>
+    <rect x="790" y="396" width="180" height="72" rx="10"/>
+  </g>
+  <!-- google -->
+  <g transform="translate(384,432)">
+    <circle r="18" fill="#fff" stroke="#c9cfe0"/>
+    <text y="7" font-size="20" font-weight="bold" fill="#4285f4" text-anchor="middle">G</text>
+  </g>
+  <!-- mail -->
+  <g transform="translate(604,432)">
+    <circle r="18" fill="#fff" stroke="#c9cfe0"/>
+    <rect x="-10" y="-7" width="20" height="14" rx="2" fill="none" stroke="#d93025" stroke-width="2"/>
+    <path d="M-10 -6l10 7 10-7" fill="none" stroke="#d93025" stroke-width="2"/>
+  </g>
+  <!-- shield -->
+  <g transform="translate(824,432)">
+    <circle r="18" fill="#fff" stroke="#c9cfe0"/>
+    <path d="M0 -11l9 3v6c0 6-4 10-9 12-5-2-9-6-9-12v-6z" fill="#f38020"/>
+    <path d="M-4 0l3 3 5-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <g font-size="13.5" font-weight="bold" fill="#1f2d5c">
+    <text x="412" y="428">Google Sign-in</text>
+    <text x="632" y="428">Gmail SMTP</text>
+    <text x="852" y="428">Turnstile</text>
+  </g>
+  <g font-size="12" fill="#666">
+    <text x="412" y="447">link account</text>
+    <text x="632" y="447">emails, reset</text>
+    <text x="852" y="447">bot check</text>
+  </g>
+
+  <!-- deploy -->
+  <g transform="translate(40,396)">
+    <rect width="270" height="72" rx="10" fill="#1f2d5c"/>
+    <text x="16" y="28" font-size="13.5" font-weight="bold" fill="#fff">Deployment</text>
+    <text x="16" y="50" font-size="12.5" fill="#d4a53a">GitHub → Actions → FTP</text>
+  </g>
+  <text x="40" y="520" font-size="12" fill="#888">The browser never touches the database: only the PHP server does. Everything runs over HTTPS.</text>
+</svg>

@@ -13,7 +13,7 @@ ob_start(); ?>
     <div class="form-msg" role="alert"></div>
     <div class="blk">
       <div class="blk-head"><span class="blk-ic"><?= icon('route') ?></span><div><h3>Automatic routing</h3><p>Work keeps moving even when no admin is online.</p></div></div>
-      <label class="srow"><span class="srow-t"><b>Route new concerns automatically</b><small>Each new concern goes to the least-busy handler of its type. Types with no handler wait in the Assignment Queue.</small></span>
+      <label class="srow"><span class="srow-t"><b>Route new concerns automatically</b><small>Each new concern goes to the owner of its type, even if the owner is busy. Types with no owner wait in the Assignment Queue.</small></span>
         <input type="hidden" name="auto_assign" value="0"><input type="checkbox" class="switch" name="auto_assign" value="1" id="auto_assign"></label>
       <a class="set-link-inline" href="<?= e(url('admin/campus-data.php')) ?>"><?= icon('users') ?> Choose who handles each concern type</a>
     </div>

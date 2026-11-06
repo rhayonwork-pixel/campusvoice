@@ -2,6 +2,7 @@
 /** Admin: dashboard, concern management, assignment, staff workload. The admin always sees who sent an anonymous concern. */
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/concerns.php';
+require __DIR__ . '/../includes/visits.php';
 
 $action = input('action');
 $reads = ['dashboard', 'list', 'workload', 'detail', 'staff_options'];
@@ -120,7 +121,8 @@ switch ($action) {
         $history = q("SELECT a.assigned_at, a.assignment_status, a.reason, (a.assigned_by IS NULL) AS auto, CONCAT(u.first_name,' ',u.last_name) AS staff_name
                       FROM assignments a JOIN users u ON u.user_id = a.staff_id WHERE a.concern_id = ? ORDER BY a.assigned_at DESC", [$id])->fetchAll();
         $fb = q('SELECT rating, comment FROM feedback WHERE concern_id = ?', [$id])->fetch();
-        json_out(['ok' => true, 'concern' => $c, 'assignment' => active_assignment($id), 'history' => $history, 'feedback' => $fb ?: null,
+        $visits = visit_rows($id);
+        json_out(['ok' => true, 'concern' => $c, 'assignment' => active_assignment($id), 'history' => $history, 'feedback' => $fb ?: null, 'visit' => visit_active($visits), 'visits' => $visits,
                   'suggested' => suggested_staff((int)$c['category_id']), 'timeline' => concern_timeline($id, true), 'photos' => concern_photos($id)]);
     }
 
@@ -155,6 +157,9 @@ switch ($action) {
         audit($prev ? 'concern_reassigned' : 'concern_assigned', "{$c['concern_code']} " . ($prev ? 'reassigned' : 'assigned') . ' to ' . display_name($staff));
         json_out(['ok' => true, 'message' => $prev ? 'Concern reassigned.' : 'Concern assigned.']);
     }
+
+    case 'visit_schedule': case 'visit_result': case 'visit_cancel':
+        visit_staff_action($u, $action);
 
     case 'set_status': {
         $id = input_int('id'); $new = input('status'); $note = mb_substr(input('note'), 0, 500);

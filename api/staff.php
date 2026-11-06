@@ -2,9 +2,10 @@
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/concerns.php';
 require __DIR__ . '/../includes/upload.php';
+require __DIR__ . '/../includes/visits.php';
 
 $action = input('action');
-$u = api_guard(['staff'], !in_array($action, ['summary', 'today', 'list', 'detail'], true));
+$u = api_guard(['staff'], !in_array($action, ['summary', 'today', 'list', 'detail', 'visits'], true));
 $uid = (int)$u['user_id'];
 
 /** Assignment row for this staff member on a concern, or stop. */
@@ -70,9 +71,23 @@ switch ($action) {
         if ($a['seen_at'] === null && $a['assignment_status'] === 'active') q('UPDATE assignments SET seen_at = NOW() WHERE assignment_id = ?', [$a['assignment_id']]);
         $st = db()->prepare('SELECT ' . concern_columns() . ', ' . reporter_columns() . ' ' . concern_joins() . ' WHERE c.concern_id = :id');
         $st->execute([':id' => $id]);
-        json_out(['ok' => true, 'concern' => $st->fetch(), 'assignment_status' => $a['assignment_status'],
+        $visits = visit_rows($id);
+        json_out(['ok' => true, 'concern' => $st->fetch(), 'assignment_status' => $a['assignment_status'], 'visit' => visit_active($visits), 'visits' => $visits,
                   'timeline' => concern_timeline($id), 'photos' => concern_photos($id)]);
     }
+
+    case 'visits': {
+        // my face-to-face meetings: everything open in the next 2 weeks, plus ones that already passed and still need a result
+        $rows = q("SELECT v.visit_id, v.concern_id, v.scheduled_at, v.place, v.status, (v.scheduled_at < NOW()) AS needs_result, c.concern_code, c.title, c.is_anonymous
+                   FROM visits v JOIN concerns c ON c.concern_id = v.concern_id
+                   JOIN assignments a ON a.concern_id = c.concern_id AND a.staff_id = ? AND a.assignment_status = 'active'
+                   WHERE v.status IN " . CV_VISIT_OPEN . " AND v.scheduled_at < (NOW() + INTERVAL 14 DAY)
+                   ORDER BY v.scheduled_at LIMIT 30", [$uid])->fetchAll();
+        json_out(['ok' => true, 'rows' => $rows]);
+    }
+
+    case 'visit_schedule': case 'visit_result': case 'visit_cancel':
+        visit_staff_action($u, $action);
 
     case 'start': {
         $id = input_int('id');

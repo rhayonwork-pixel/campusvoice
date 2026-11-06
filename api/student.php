@@ -2,9 +2,10 @@
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/concerns.php';
 require __DIR__ . '/../includes/upload.php';
+require __DIR__ . '/../includes/visits.php';
 
 $action = input('action');
-$u = api_guard(['student'], !in_array($action, ['list', 'options', 'detail', 'summary'], true));
+$u = api_guard(['student'], !in_array($action, ['list', 'options', 'detail', 'summary', 'visits_month', 'visit_ics'], true));
 $uid = (int)$u['user_id'];
 
 /** Fetch one of THIS student's concerns or stop. */
@@ -33,13 +34,49 @@ switch ($action) {
                             SUM(status IN ('In Progress','Waiting for Resources')) in_progress,
                             SUM(status IN ('Resolved','Closed')) resolved
                      FROM concerns WHERE student_id = ?", [$uid])->fetch();
+        $visits = q("SELECT v.visit_id, v.concern_id, v.scheduled_at, v.place, v.status, c.concern_code, c.title
+                     FROM visits v JOIN concerns c ON c.concern_id = v.concern_id
+                     WHERE c.student_id = ? AND v.status IN " . CV_VISIT_OPEN . " AND v.scheduled_at > (NOW() - INTERVAL 1 DAY)
+                     ORDER BY v.scheduled_at LIMIT 5", [$uid])->fetchAll();
         $recent = q('SELECT cu.created_at, cu.update_type, cu.response, c.concern_id, c.concern_code, c.title
                      FROM concern_updates cu JOIN concerns c ON c.concern_id = cu.concern_id
                      WHERE c.student_id = ? ORDER BY cu.created_at DESC, cu.update_id DESC LIMIT 6', [$uid])->fetchAll();
         $needInfo = q("SELECT c.concern_id, c.concern_code, c.title FROM concerns c WHERE c.student_id = ? AND c.status = 'Additional Info Needed' ORDER BY c.updated_at DESC LIMIT 5", [$uid])->fetchAll();
         $awaiting = q("SELECT c.concern_id, c.concern_code, c.title FROM concerns c LEFT JOIN feedback f ON f.concern_id = c.concern_id
                        WHERE c.student_id = ? AND c.status IN ('Resolved','Closed') AND f.feedback_id IS NULL ORDER BY c.resolved_at DESC LIMIT 5", [$uid])->fetchAll();
-        json_out(['ok' => true, 'counts' => array_map('intval', $counts), 'recent' => $recent, 'awaiting_rating' => $awaiting, 'needs_info' => $needInfo]);
+        json_out(['ok' => true, 'counts' => array_map('intval', $counts), 'recent' => $recent, 'awaiting_rating' => $awaiting, 'needs_info' => $needInfo, 'visits' => $visits,
+            'visit_total' => (int)q("SELECT COUNT(*) FROM visits v JOIN concerns c ON c.concern_id = v.concern_id WHERE c.student_id = ? AND v.status <> 'cancelled'", [$uid])->fetchColumn()]);
+    }
+
+    /** My meetings for one month (the calendar on the dashboard). */
+    case 'visits_month': {
+        $start = input('start'); $end = input('end');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $start) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $end)) json_fail('Invalid dates.');
+        $rows = q("SELECT v.visit_id, v.concern_id, v.scheduled_at, v.place, v.note, v.status, c.concern_code, c.title
+                   FROM visits v JOIN concerns c ON c.concern_id = v.concern_id
+                   WHERE c.student_id = ? AND v.status <> 'cancelled' AND v.scheduled_at >= ? AND v.scheduled_at < ? + INTERVAL 1 DAY
+                   ORDER BY v.scheduled_at", [$uid, $start, $end])->fetchAll();
+        json_out(['ok' => true, 'rows' => $rows]);
+    }
+
+    /** "Add to my phone calendar": one meeting as an .ics file. */
+    case 'visit_ics': {
+        $vid = input_int('visit_id');
+        $v = q("SELECT v.*, c.concern_code, c.title FROM visits v JOIN concerns c ON c.concern_id = v.concern_id WHERE v.visit_id = ? AND c.student_id = ?", [$vid, $uid])->fetch();
+        if (!$v) json_fail('Meeting not found.', 404);
+        $esc = function (string $t): string { return str_replace(["\\", ';', ',', "\r", "\n"], ['\\', '\;', '\,', '', '\n'], $t); };
+        $st = new DateTime($v['scheduled_at'], new DateTimeZone('Asia/Manila'));
+        $en = (clone $st)->modify('+30 minutes');
+        $desc = 'Concern ' . $v['concern_code'] . ': ' . $v['title'] . ($v['note'] ? '. ' . $v['note'] : '') . '. Please bring your school ID.';
+        $ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//CampusVoice//SASO//EN\r\nCALSCALE:GREGORIAN\r\nBEGIN:VEVENT\r\n"
+             . 'UID:visit-' . $v['visit_id'] . "@campusvoice\r\nDTSTAMP:" . gmdate('Ymd\THis\Z') . "\r\n"
+             . 'DTSTART;TZID=Asia/Manila:' . $st->format('Ymd\THis') . "\r\nDTEND;TZID=Asia/Manila:" . $en->format('Ymd\THis') . "\r\n"
+             . 'SUMMARY:' . $esc('SASO meeting (' . $v['concern_code'] . ')') . "\r\nLOCATION:" . $esc($v['place']) . "\r\nDESCRIPTION:" . $esc($desc) . "\r\n"
+             . "BEGIN:VALARM\r\nTRIGGER:-PT1H\r\nACTION:DISPLAY\r\nDESCRIPTION:SASO meeting in 1 hour\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        header('Content-Type: text/calendar; charset=utf-8');
+        header('Content-Disposition: attachment; filename="saso-meeting-' . $v['concern_code'] . '.ics"');
+        header('Cache-Control: no-store');
+        echo $ics; exit;
     }
 
     case 'list': {
@@ -66,6 +103,8 @@ switch ($action) {
         $title = input('title'); $desc = input('description');
         $cat = input_int('category_id'); $loc = input_int('location_id'); $sev = input('severity');
         $anon = input('is_anonymous') === '1' ? 1 : 0;
+        $wantsMeeting = input('wants_meeting') === '1' ? 1 : 0;
+        $meetingPref = $wantsMeeting ? (mb_substr(input('meeting_pref'), 0, 120) ?: null) : null;
         if (mb_strlen($title) < 5 || mb_strlen($title) > 150) json_fail('Title must be 5–150 characters.');
         if (mb_strlen($desc) < 15 || mb_strlen($desc) > 3000) json_fail('Please describe the concern in at least 15 characters.');
         if (!in_array($sev, ['Minor', 'Major', 'Urgent'], true)) json_fail('Choose a severity level.');
@@ -92,9 +131,9 @@ switch ($action) {
         $pdo = db();
         $pdo->beginTransaction();
         try {
-            q('INSERT INTO concerns (concern_code, student_id, category_id, location_id, severity, status, title, description, is_anonymous, due_at)
-               VALUES (?,?,?,?,?,"Pending",?,?,?, NOW() + INTERVAL ? HOUR)',
-                ['TMP-' . bin2hex(random_bytes(6)), $uid, $cat, $loc, $sev, $title, $desc, $anon, severity_hours($sev)]);
+            q('INSERT INTO concerns (concern_code, student_id, category_id, location_id, severity, status, title, description, is_anonymous, wants_meeting, meeting_pref, due_at)
+               VALUES (?,?,?,?,?,"Pending",?,?,?,?,?, NOW() + INTERVAL ? HOUR)',
+                ['TMP-' . bin2hex(random_bytes(6)), $uid, $cat, $loc, $sev, $title, $desc, $anon, $wantsMeeting, $meetingPref, severity_hours($sev)]);
             $id = (int)$pdo->lastInsertId();
             $code = next_concern_code($id);
             q('UPDATE concerns SET concern_code = ? WHERE concern_id = ?', [$code, $id]);
@@ -114,7 +153,7 @@ switch ($action) {
         else audit('concern_created', "Created {$code}");
         $routed = auto_route($id);
         $where = $routed ? ' Routed to ' . display_name($routed) . '.' : ' Waiting in the assignment queue.';
-        notify_role('admin', $sev === 'Urgent' ? 'Urgent concern' : 'New concern', "{$code} — {$title} ({$sev}, {$catRow['category_name']}) from {$who}.{$where}", $id, $sev === 'Urgent');
+        notify_role('admin', $sev === 'Urgent' ? 'Urgent concern' : 'New concern', "{$code} — {$title} ({$sev}, {$catRow['category_name']}) from {$who}.{$where}" . ($wantsMeeting ? ' Asked for a face-to-face meeting.' : ''), $id, $sev === 'Urgent');
         json_out(['ok' => true, 'message' => "Concern {$code} submitted.", 'concern_id' => $id, 'code' => $code,
                   'next_steps' => $catRow['next_steps'], 'routed' => (bool)$routed]);
     }
@@ -128,7 +167,8 @@ switch ($action) {
                      ORDER BY (a.assignment_status = 'active') DESC, a.assigned_at DESC LIMIT 1", [$id])->fetch();
         $fb = q('SELECT rating, comment, created_at FROM feedback WHERE concern_id = ?', [$id])->fetch();
         unset($c['student_id']);
-        json_out(['ok' => true, 'concern' => $c, 'assignee' => $assign ?: null, 'feedback' => $fb ?: null,
+        $visits = visit_rows($id);
+        json_out(['ok' => true, 'concern' => $c, 'assignee' => $assign ?: null, 'feedback' => $fb ?: null, 'visit' => visit_active($visits), 'visits' => $visits,
                   'timeline' => concern_timeline($id), 'photos' => concern_photos($id)]);
     }
 
@@ -168,6 +208,10 @@ switch ($action) {
         notify_role('admin', 'Student replied', $text, $id);
         $c['is_anonymous'] ? audit_anonymous('concern_replied', "Replied on {$c['concern_code']}") : audit('concern_replied', "Replied on {$c['concern_code']}");
         json_out(['ok' => true, 'message' => 'Reply sent. The office will continue with your concern.']);
+    }
+
+    case 'visit_confirm': case 'visit_reschedule': {
+        visit_student_action($u, own_concern(input_int('id'), $uid), $action);
     }
 
     case 'confirm': case 'reopen': case 'cancel': {

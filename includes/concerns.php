@@ -17,7 +17,8 @@ function concern_columns(): string
             c.due_at, c.created_at, c.updated_at, c.resolved_at, c.closed_at,
             (c.due_at IS NOT NULL AND c.due_at < NOW() AND c.status NOT IN " . CV_OPEN_STATUSES . ") AS overdue,
             cat.category_id, cat.category_name,
-            cat.needs_location, cat.next_steps,
+            cat.needs_location, cat.next_steps, c.wants_meeting, c.meeting_pref,
+            (SELECT MIN(v.scheduled_at) FROM visits v WHERE v.concern_id = c.concern_id AND v.status IN ('scheduled','confirmed','reschedule')) AS next_visit,
             loc.location_id, CONCAT(loc.building, ' · ', loc.floor, ' · ', loc.area) AS location,
             (SELECT COUNT(*) FROM photos p WHERE p.concern_id = c.concern_id) AS photo_count";
 }
@@ -116,7 +117,7 @@ function suggested_staff(int $categoryId): array
 
 /**
  * Category routing: when auto-assign is on, hand a new concern to the least-busy handler of its type
- * (available before busy, nobody on leave). No handler = it waits in the admin's Assignment Queue.
+ * (available first, then busy). Busy or on leave NEVER sends it to someone whose area does not match: the owner keeps it. No handler = admin queue.
  * Call AFTER the concern row is committed. Returns the staff row or null.
  */
 function auto_route(int $concernId): ?array
@@ -129,8 +130,8 @@ function auto_route(int $concernId): ?array
                 FROM category_handlers h
                 JOIN users u ON u.user_id = h.staff_id
                 LEFT JOIN departments d ON d.department_id = u.department_id
-                WHERE h.category_id = ? AND u.role = 'staff' AND u.account_status = 'active' AND u.availability <> 'on_leave'
-                ORDER BY (u.availability = 'available') DESC, active_load ASC, RAND() LIMIT 1", [$c['category_id']])->fetch();
+                WHERE h.category_id = ? AND u.role = 'staff' AND u.account_status = 'active'
+                ORDER BY (u.availability = 'available') DESC, (u.availability = 'busy') DESC, active_load ASC, RAND() LIMIT 1", [$c['category_id']])->fetch();
     if (!$staff) return null;
 
     $pdo = db(); $pdo->beginTransaction();
@@ -144,7 +145,11 @@ function auto_route(int $concernId): ?array
         $pdo->rollBack(); error_log('auto_route: ' . $ex->getMessage());
         return null;
     }
-    notify((int)$staff['user_id'], 'New assignment', "{$c['concern_code']} ({$c['severity']}, {$c['category_name']}) was routed to you: {$c['title']}", $concernId, $c['severity'] === 'Urgent');
+    // Busy or on leave never moves a concern to someone whose work does not match: the owner keeps it, and the admin is told when the owner is away.
+    if ($staff['availability'] === 'on_leave') {
+        notify_role('admin', 'Owner is on leave', "{$c['concern_code']} ({$c['category_name']}) was routed to " . display_name($staff) . ', who is on leave. Follow up if it is urgent.', $concernId, $c['severity'] === 'Urgent');
+    }
+    notify((int)$staff['user_id'], 'New assignment', "{$c['concern_code']} ({$c['severity']}, {$c['category_name']}) was routed to you: {$c['title']}" . ((int)$c['wants_meeting'] ? ' The student asked for a face-to-face meeting.' : ''), $concernId, $c['severity'] === 'Urgent');
     q('INSERT INTO audit_logs (user_id, user_label, role, action, details, ip_address) VALUES (NULL, "System", "system", "concern_assigned", ?, ?)',
         ["{$c['concern_code']} routed automatically to " . display_name($staff), client_ip()]);
     return $staff;

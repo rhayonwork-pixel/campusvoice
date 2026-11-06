@@ -5,7 +5,7 @@
   const ctx = (r) => E([r.reporter_course, r.reporter_year ? 'Year ' + r.reporter_year : '', r.reporter_section].filter(Boolean).join(' · '));
   // the admin sees the real sender; anonymous ones are marked because staff only see "Anonymous Student"
   const reporter = (r) => '<div class="cell-title">' + E(r.reporter_name) + (+r.is_anonymous ? ' <span class="anon-mark" title="Sent anonymously: staff see Anonymous Student">' + ic('eyeOff') + '</span>' : '') + '</div><div class="cell-sub">' + ctx(r) + '</div>';
-  const titleCell = (r) => '<div class="cell-title">' + E(r.title) + CV.ui.anon(r) + '</div><div class="cell-sub">' + E(r.concern_code) + ' · ' + E(r.category_name) + (r.location ? ' · ' + E(r.location) : '') + '</div>';
+  const titleCell = (r) => '<div class="cell-title">' + E(r.title) + CV.ui.anon(r) + CV.ui.visitTag(r) + '</div><div class="cell-sub">' + E(r.concern_code) + ' · ' + E(r.category_name) + (r.location ? ' · ' + E(r.location) : '') + '</div>';
   const viewUrl = (id) => CV.url('admin/concern.php?id=' + id);
 
   /* ---------- dashboard ---------- */
@@ -144,9 +144,10 @@
         '<dt>Target date</dt><dd>' + CV.ui.due(c) + '</dd><dt>Assigned to</dt><dd>' + (a ? E(a.staff_name) : 'Not assigned') + '</dd><dt>Description</dt><dd>' + E(c.description).replace(/\n/g, '<br>') + '</dd>' +
         (r.feedback ? '<dt>Rating</dt><dd>' + CV.ui.stars(+r.feedback.rating) + (r.feedback.comment ? '<br>' + E(r.feedback.comment) : '') + '</dd>' : '') + '</dl>' +
         CV.ui.photos(r.photos, 'Photo') + (actions ? '<div class="card-head" style="border-top:1px solid var(--line);border-bottom:0"><span class="cell-sub">Actions</span><div class="toolbar">' + actions + '</div></div>' : '') + '</div>' +
-        '<div class="card"><div class="card-head"><h3>Assignment history</h3></div>' + (r.history.length ? '<div class="list">' + r.history.map((h) => '<div class="list-item"><div class="li-main"><b>' + E(h.staff_name) + (+h.auto ? ' <span class="auto-tag">' + ic('route') + ' auto</span>' : '') + '</b><span>' + CV.fmtDate(h.assigned_at, true) + (h.reason ? ' · ' + E(h.reason) : '') + '</span></div><span class="badge st-' + (h.assignment_status === 'active' ? 'In-Progress' : h.assignment_status === 'completed' ? 'Resolved' : 'Cancelled') + '">' + E(h.assignment_status) + '</span></div>').join('') + '</div>' : '<div class="empty">Not assigned yet.</div>') + '</div></div>' +
+        CV.ui.visitStaff(c, r.visits, r.visit) + '<div class="card"><div class="card-head"><h3>Assignment history</h3></div>' + (r.history.length ? '<div class="list">' + r.history.map((h) => '<div class="list-item"><div class="li-main"><b>' + E(h.staff_name) + (+h.auto ? ' <span class="auto-tag">' + ic('route') + ' auto</span>' : '') + '</b><span>' + CV.fmtDate(h.assigned_at, true) + (h.reason ? ' · ' + E(h.reason) : '') + '</span></div><span class="badge st-' + (h.assignment_status === 'active' ? 'In-Progress' : h.assignment_status === 'completed' ? 'Resolved' : 'Cancelled') + '">' + E(h.assignment_status) + '</span></div>').join('') + '</div>' : '<div class="empty">Not assigned yet.</div>') + '</div></div>' +
         '<div class="card"><div class="card-head"><h3>Progress</h3></div>' + CV.ui.timeline(r.timeline) + '</div></div>';
 
+      CV.ui.bindVisitStaff(detail, API, id, r.visit, load);
       const da = CV.$('#doAssign', detail);
       if (da) da.addEventListener('click', () => { afterAssign = load; openAssign(Object.assign({ staff_id: a ? a.staff_id : 0 }, c), !!a); });
       const sv = CV.$('#sevSel', detail);

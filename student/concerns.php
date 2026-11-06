@@ -50,6 +50,13 @@ page_head('My Concerns', 'Everything you have reported, and where it stands.',
         <label class="dropzone" id="dz"><?= icon('camera') ?><span>Click or drop photos here</span><input type="file" id="ncPhotos" name="photos[]" accept="image/jpeg,image/png,image/webp" multiple></label>
         <div class="previews" id="previews"></div>
       </div>
+      <div class="meet-box">
+        <label class="anon-box check" for="ncMeet">
+          <input type="checkbox" id="ncMeet" name="wants_meeting" value="1">
+          <span style="display:flex;gap:10px"><?= icon('pin') ?><span><b>I'd like to meet in person</b><span>Most concerns are settled face to face. The office picks a private meeting and tells you the date here. It is confidential, and an anonymous concern stays anonymous until you choose to come.</span></span></span>
+        </label>
+        <div class="field" id="ncMeetPref" hidden><label for="ncPref">Best days or times <span class="opt">optional</span></label><input class="input" id="ncPref" name="meeting_pref" maxlength="120" placeholder="e.g. weekday afternoons"></div>
+      </div>
       <label class="anon-box check" for="ncAnon">
         <input type="checkbox" id="ncAnon" name="is_anonymous" value="1">
         <span style="display:flex;gap:10px"><?= icon('eyeOff') ?><span><b>Send as anonymous</b><span>The staff handling it see only your course, year and section — not your name or ID. Only the SASO admin can see who sent it, so they can still protect and contact you if needed. You can track it as usual.</span></span></span>

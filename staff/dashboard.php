@@ -33,4 +33,8 @@ page_head('Today\'s Work', 'New and due-today assignments, most urgent first.',
       <tbody><tr class="tbl-skel"><td><div class="skel"></div></td><td><div class="skel"></div></td><td><div class="skel"></div></td><td><div class="skel"></div></td><td><div class="skel"></div></td></tr></tbody></table>
   </div>
 </section>
+<section class="card">
+  <div class="card-head"><h3><?= icon('pin') ?> Face-to-face meetings <span class="tab-count" id="visitCount">0</span></h3><span class="live">Next 2 weeks</span></div>
+  <div class="list" id="visitList"><div class="empty">Loading…</div></div>
+</section>
 <?php panel_close(['staff.js']); ?>

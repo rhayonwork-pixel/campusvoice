@@ -138,3 +138,10 @@ html[data-theme="dark"] { --dot: rgba(169, 195, 245, .09); }
 [data-theme="dark"] .nav-s { color: #b4c3de; }
 [data-theme="dark"] .nav-s:hover { background: rgba(255, 255, 255, .06); color: #fff; }
 [data-theme="dark"] .nav-s.on { color: #fff; }
+[data-theme="dark"] .vc-cal, [data-theme="dark"] .badge-visit { color: #6fd6dc; }
+[data-theme="dark"] .vc-ok { color: #4cc790; }
+
+/* My meetings calendar */
+:root[data-theme="dark"] .mc-rel { background: #3a2f12; color: #f0c96a; }
+:root[data-theme="dark"] .mc-day.has { background: #2a2a1d; }
+:root[data-theme="dark"] .mc-day.is-sel { background: var(--gold); color: #0a1c40; }

@@ -7,7 +7,7 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
-DROP TABLE IF EXISTS category_handlers, events, feedback, notifications, photos, concern_updates, assignments, concerns,
+DROP TABLE IF EXISTS visits, category_handlers, events, feedback, notifications, photos, concern_updates, assignments, concerns,
   working_hours, settings, audit_logs, password_resets, login_attempts,
   locations, categories, users, departments;
 
@@ -101,6 +101,8 @@ CREATE TABLE concerns (
   title VARCHAR(150) NOT NULL,
   description TEXT NOT NULL,
   is_anonymous TINYINT(1) NOT NULL DEFAULT 0,
+  wants_meeting TINYINT(1) NOT NULL DEFAULT 0,       -- the student asked to meet face to face
+  meeting_pref VARCHAR(120) NULL,                    -- e.g. "weekday afternoons"
   due_at DATETIME NULL,                              -- deadline derived from severity
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -131,13 +133,34 @@ CREATE TABLE assignments (
   CONSTRAINT fk_asg_by FOREIGN KEY (assigned_by) REFERENCES users(user_id)
 ) ENGINE=InnoDB;
 
--- Which staff handle which concern type. With auto-assign on, new concerns go straight to the least-busy handler.
+-- Which staff own which concern type. With auto-assign on, a new concern goes straight to the owner, even if busy.
 CREATE TABLE category_handlers (
   category_id INT UNSIGNED NOT NULL,
   staff_id INT UNSIGNED NOT NULL,
   PRIMARY KEY (category_id, staff_id),
   CONSTRAINT fk_ch_cat FOREIGN KEY (category_id) REFERENCES categories(category_id) ON DELETE CASCADE,
   CONSTRAINT fk_ch_staff FOREIGN KEY (staff_id) REFERENCES users(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Face-to-face visits: most concerns end in a private meeting at the SASO office.
+-- One concern can have several over time (rescheduled, missed...); at most one is open at once.
+CREATE TABLE visits (
+  visit_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  concern_id INT UNSIGNED NOT NULL,
+  scheduled_by INT UNSIGNED NULL,
+  scheduled_at DATETIME NOT NULL,
+  place VARCHAR(120) NOT NULL DEFAULT 'SASO Office',
+  note VARCHAR(255) NULL,                            -- shown to the student ("bring your school ID")
+  status ENUM('scheduled','confirmed','reschedule','attended','no_show','cancelled') NOT NULL DEFAULT 'scheduled',
+  student_note VARCHAR(255) NULL,                    -- why the student asked for another time
+  outcome_note VARCHAR(255) NULL,                    -- staff note after the meeting
+  responded_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_visit_concern (concern_id, scheduled_at),
+  KEY idx_visit_when (scheduled_at, status),
+  CONSTRAINT fk_visit_concern FOREIGN KEY (concern_id) REFERENCES concerns(concern_id) ON DELETE CASCADE,
+  CONSTRAINT fk_visit_by FOREIGN KEY (scheduled_by) REFERENCES users(user_id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 CREATE TABLE concern_updates (

@@ -14,6 +14,7 @@ $cats = q('SELECT category_id, category_name FROM categories WHERE status = "act
       <button type="button" class="lgi on" data-sev="Urgent" aria-pressed="true"><i style="background:#b42318"></i>Urgent</button>
       <button type="button" class="lgi on" data-sev="Major" aria-pressed="true"><i style="background:#b25e09"></i>Major</button>
       <button type="button" class="lgi on" data-sev="Minor" aria-pressed="true"><i style="background:#0f7b4f"></i>Minor</button>
+      <button type="button" class="lgi on" data-vis="1" aria-pressed="true"><i style="background:#0f7f86"></i>Meetings</button>
       <button type="button" class="lgi" data-asg="1" aria-pressed="false"><i style="background:#5440b8"></i>Assignments</button>
       <span class="lgi static"><i style="background:#173d7a"></i>Event</span>
     </div>
@@ -37,6 +38,7 @@ $cats = q('SELECT category_id, category_name FROM categories WHERE status = "act
     <div class="modal-body">
       <div class="cd-counts" id="dmCounts"></div>
       <div class="cd-events" id="dmEvents"></div>
+      <div class="cd-visits" id="dmVisits"></div>
       <div class="cd-list" id="dmList"></div>
       <div class="cd-more" id="dmMore" hidden><button type="button" class="btn btn-ghost btn-block" id="dmMoreBtn">Show more</button></div>
     </div>

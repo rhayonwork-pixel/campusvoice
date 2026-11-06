@@ -16,11 +16,11 @@ $autoOn = setting('auto_assign', '1') === '1';
     <div class="route-banner <?= $autoOn ? 'on' : '' ?>">
       <span class="rb-ic"><?= icon('route') ?></span>
       <div><b>Automatic routing is <?= $autoOn ? 'ON' : 'OFF' ?></b>
-        <span><?= $autoOn ? 'A new concern goes straight to the least-busy handler of its type, even when no admin is online. Types with no handler wait in the Assignment Queue.'
+        <span><?= $autoOn ? 'A new concern goes straight to the owner of its type, even when no admin is online and even if the owner is busy. Types with no owner wait in the Assignment Queue.'
                           : 'Every new concern waits in the Assignment Queue for an admin. Turn routing on in System Settings → Concern rules.' ?></span></div>
       <a class="btn btn-ghost btn-sm" href="<?= e(url('admin/settings.php#rules')) ?>"><?= icon('settings') ?> Change</a>
     </div>
-    <div class="card-head"><span class="cell-sub">Pick one or more handlers per type. Staff on leave are skipped.</span><button class="btn btn-primary btn-sm" type="button" id="addCat"><?= icon('plus') ?> Add type</button></div>
+    <div class="card-head"><span class="cell-sub">Each SASO area has one owner. Busy or on leave never sends it to someone else.</span><button class="btn btn-primary btn-sm" type="button" id="addCat"><?= icon('plus') ?> Add type</button></div>
     <div class="table-wrap"><table class="tbl" id="catTable"><thead><tr><th>Concern type</th><th>Handled by</th><th>Office</th><th class="nw">Concerns</th><th>Status</th><th class="nw" style="text-align:right">Actions</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="tab-pane" id="paneLoc">
@@ -39,7 +39,7 @@ $autoOn = setting('auto_assign', '1') === '1';
       <div class="field"><label for="catDesc">Short description <span class="opt">shown on the type card</span></label><input class="input" id="catDesc" name="description" maxlength="255"></div>
       <div class="field"><label for="catNext">What happens next <span class="opt">shown to the student after choosing this type</span></label><textarea class="textarea" id="catNext" name="next_steps" maxlength="500" rows="3"></textarea></div>
       <label class="check"><input type="checkbox" name="needs_location" value="1" id="catLoc"> Ask for a location (building / floor / room)</label>
-      <fieldset class="handler-pick"><legend>Handled by <span class="opt">new concerns of this type go to the least-busy one</span></legend>
+      <fieldset class="handler-pick"><legend>Handled by <span class="opt">new concerns of this type go to them</span></legend>
         <div class="handler-list" id="catHandlers"></div></fieldset></div>
     <div class="modal-foot"><button type="button" class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Save</button></div></form>
 </div>

@@ -3,6 +3,66 @@
   'use strict';
   const E = CV.esc, ic = CV.ui.ic;
 
+  /* ---------- "My meetings" calendar on the student dashboard ---------- */
+  function initMeetCal() {
+    const card = CV.$('#mcCard'); if (!card) return;
+    card.hidden = false;
+    const grid = CV.$('#mcGrid'), items = CV.$('#mcItems'), head = CV.$('#mcSideHead'), title = CV.$('#mcTitle');
+    const pad = (n) => String(n).padStart(2, '0'), iso = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    const todayIso = iso(new Date());
+    const when = (at) => new Date(String(at).replace(' ', 'T'));
+    const lab = { scheduled: ['Waiting for you', 'st-Pending'], confirmed: ['You will come', 'st-Resolved'], reschedule: ['Another time asked', 'st-Additional-Info-Needed'], attended: ['Attended', 'st-Closed'], no_show: ['Missed', 'st-Reopened'] };
+    const dot = (v) => (['attended', 'no_show'].includes(v.status) ? 'mc-past' : v.status === 'confirmed' ? 'mc-ok' : 'mc-wait');
+    const rel = (d) => { const n = Math.round((new Date(iso(d)) - new Date(todayIso)) / 864e5); return n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n > 1 && n < 8 ? 'In ' + n + ' days' : ''; };
+    let cur = new Date(); cur.setDate(1); cur.setHours(0, 0, 0, 0);
+    let sel = null, rows = [];
+
+    function item(v) {
+      const d = when(v.scheduled_at), r = rel(d), l = lab[v.status] || ['', ''];
+      return '<div class="mc-item"><span class="vc-cal sm"><small>' + E(d.toLocaleDateString('en-PH', { month: 'short' })) + '</small><b>' + d.getDate() + '</b></span>' +
+        '<div class="mc-main"><b>' + E(d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })) + ' · ' + E(v.place) + (r ? ' <span class="mc-rel">' + r + '</span>' : '') + '</b>' +
+        '<a href="' + CV.url('student/concern.php?id=' + v.concern_id) + '">' + E(v.concern_code) + ' · ' + E(v.title) + '</a>' +
+        '<span class="mc-acts"><span class="badge ' + l[1] + '">' + l[0] + '</span>' +
+        (v.status === 'scheduled' ? '<button type="button" class="btn btn-primary btn-sm" data-ok="' + v.visit_id + '" data-c="' + v.concern_id + '">' + ic('check') + " I'll be there</button>" : '') +
+        (['scheduled', 'confirmed'].includes(v.status) ? '<a class="btn btn-ghost btn-sm" href="' + CV.url('api/student.php?action=visit_ics&visit_id=' + v.visit_id) + '">' + ic('calendar') + ' Add to my phone</a>' : '') +
+        '</span></div></div>';
+    }
+
+    function draw() {
+      title.textContent = cur.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+      const byDay = {};
+      rows.forEach((v) => { (byDay[String(v.scheduled_at).slice(0, 10)] = byDay[String(v.scheduled_at).slice(0, 10)] || []).push(v); });
+      const days = new Date(cur.getFullYear(), cur.getMonth() + 1, 0).getDate();
+      let h = '<span></span>'.repeat(cur.getDay());
+      for (let n = 1; n <= days; n++) {
+        const k = cur.getFullYear() + '-' + pad(cur.getMonth() + 1) + '-' + pad(n), vs = byDay[k] || [];
+        h += '<button type="button" class="mc-day' + (k === todayIso ? ' is-today' : '') + (k === sel ? ' is-sel' : '') + (vs.length ? ' has' : '') + '" data-d="' + k + '"' + (vs.length ? ' aria-label="' + n + ': ' + vs.length + ' meeting' + (vs.length > 1 ? 's' : '') + '"' : '') + '>' + n +
+          (vs.length ? '<i class="mc-d ' + dot(vs[0]) + '"></i>' : '') + '</button>';
+      }
+      grid.innerHTML = h;
+      const list = sel ? (byDay[sel] || []) : rows.filter((v) => String(v.scheduled_at).slice(0, 10) >= todayIso && !['attended', 'no_show'].includes(v.status));
+      head.textContent = sel ? when(sel + ' 00:00:00').toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' }) : (list.length ? 'Coming up this month' : 'Nothing coming up this month');
+      items.innerHTML = list.length ? list.map(item).join('') : '<div class="mc-none">' + (sel ? 'No meeting on this day.' : 'Use the arrows to look at other months.') + '</div>';
+    }
+
+    async function load() {
+      const last = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
+      try { rows = (await CV.get('api/student.php', { action: 'visits_month', start: iso(cur), end: iso(last) })).rows; } catch (e) { CV.toast(e.message, 'error'); rows = []; }
+      draw();
+    }
+
+    grid.addEventListener('click', (e) => { const b = e.target.closest('.mc-day'); if (!b) return; sel = sel === b.dataset.d ? null : b.dataset.d; draw(); });
+    CV.$('#mcPrev').addEventListener('click', () => { cur.setMonth(cur.getMonth() - 1); sel = null; load(); });
+    CV.$('#mcNext').addEventListener('click', () => { cur.setMonth(cur.getMonth() + 1); sel = null; load(); });
+    items.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-ok]'); if (!b) return;
+      b.disabled = true;
+      try { const x = await CV.post('api/student.php', { action: 'visit_confirm', id: b.dataset.c, visit_id: b.dataset.ok }); CV.toast(x.message); load(); }
+      catch (er) { CV.toast(er.message, 'error'); b.disabled = false; }
+    });
+    load();
+  }
+
   /* ---------- dashboard ---------- */
   if (CV.$('#sTotal')) {
     CV.get('api/student.php', { action: 'summary' }).then((r) => {
@@ -10,6 +70,15 @@
       CV.$('#sPending').textContent = r.counts.pending || 0;
       CV.$('#sProgress').textContent = r.counts.in_progress || 0;
       CV.$('#sResolved').textContent = r.counts.resolved || 0;
+      if (r.visit_total > 0) initMeetCal();
+      const vn = CV.$('#visitNote');
+      if (vn && r.visits && r.visits.length) {
+        const v = r.visits[0], d = new Date(String(v.scheduled_at).replace(' ', 'T'));
+        const rl = (x) => { const n = Math.round((new Date(x.toDateString()) - new Date(new Date().toDateString())) / 864e5); return n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : ''; };
+        CV.$('#visitText').innerHTML = '<b>' + (v.status === 'confirmed' ? (rl(d) ? "You're confirmed for " + rl(d).toLowerCase() : "You're confirmed for your meeting") : rl(d) ? 'Your meeting is ' + rl(d).toLowerCase() : 'You have a face-to-face meeting') + '</b> · ' + E(d.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' })) + ' at ' + E(d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })) + ', ' + E(v.place) + '. ' +
+          '<a href="' + CV.url('student/concern.php?id=' + v.concern_id) + '"><u>' + (v.status === 'scheduled' ? 'Confirm or ask for another time' : 'See details') + '</u></a>';
+        vn.hidden = false;
+      }
       const ni = CV.$('#infoNote');
       if (ni && r.needs_info && r.needs_info.length) {
         CV.$('#infoText').innerHTML = '<b>The office needs more information.</b> Reply on ' + r.needs_info.map((a) => '<a href="' + CV.url('student/concern.php?id=' + a.concern_id) + '#reply"><u>' + E(a.concern_code) + '</u></a>').join(', ') + ' so they can continue.';
@@ -37,7 +106,7 @@
       params: () => ({ action: 'list', q: CV.$('#fq').value.trim(), status: CV.$('#fstatus').value, severity: CV.$('#fsev').value }),
       empty: { title: 'No concerns found', text: 'Use “New Concern” to report one.' },
       row: (r) => '<tr class="clickable" data-href="' + CV.url('student/concern.php?id=' + r.concern_id) + '">' +
-        '<td><div class="cell-title">' + E(r.title) + CV.ui.anon(r) + '</div><div class="cell-sub">' + E(r.concern_code) + (r.location ? ' · ' + E(r.location) : '') + (r.photo_count > 0 ? ' · ' + r.photo_count + ' photo' + (r.photo_count > 1 ? 's' : '') : '') + '</div></td>' +
+        '<td><div class="cell-title">' + E(r.title) + CV.ui.anon(r) + CV.ui.visitTag(r) + '</div><div class="cell-sub">' + E(r.concern_code) + (r.location ? ' · ' + E(r.location) : '') + (r.photo_count > 0 ? ' · ' + r.photo_count + ' photo' + (r.photo_count > 1 ? 's' : '') : '') + '</div></td>' +
         '<td>' + E(r.category_name) + '</td><td>' + CV.badge.sev(r.severity) + '</td><td>' + CV.badge.st(r.status) + '</td>' +
         '<td class="nw">' + CV.fmtDate(r.created_at) + '</td><td class="nw">' + CV.ui.due(r) + '</td></tr>'
     });
@@ -53,8 +122,14 @@
     const TYPE_ICONS = { academic: 'file', bullying: 'shield', discipline: 'alert', financial: 'briefcase', scholarship: 'star', organization: 'users', welfare: 'message', facilit: 'building', other: 'sparkle' };
     const typeIcon = (name) => { const n = String(name).toLowerCase(); const k = Object.keys(TYPE_ICONS).find((x) => n.indexOf(x) !== -1); return k ? TYPE_ICONS[k] : 'list'; };
     // location only for types that need it (campus facilities); show what SASO does next
+    // sensitive types are usually settled in person, so the "meet in person" box starts ticked (the student can untick it)
+    const MEET_TYPES = ['Mental health', 'Guidance and counseling', 'Psychological impact', 'Gender development', 'Student discipline and behavior'];
+    const meet = CV.$('#ncMeet'), pref = CV.$('#ncMeetPref');
+    const showPref = () => { pref.hidden = !meet.checked; };
+    meet.addEventListener('change', () => { meet.dataset.touched = '1'; showPref(); });
     function pickType() {
       const sel = CV.$('input[name=category_id]:checked', form), c = sel ? cats[sel.value] : null;
+      if (c && !meet.dataset.touched) { meet.checked = MEET_TYPES.indexOf(c.category_name) !== -1; showPref(); }
       const needLoc = !!(c && +c.needs_location);
       CV.$('#ncLocWrap').hidden = !needLoc; CV.$('#ncLoc').required = needLoc;
       if (!needLoc) CV.$('#ncLoc').value = '';
@@ -106,7 +181,7 @@
       },
       success: (res) => {
         CV.toast(res.message + (res.routed ? ' It went straight to the right office.' : ''), 'ok'); CV.modal.close(modal);
-        form.reset(); prev.innerHTML = ''; pickType(); loaded = false; tbl.first(); CV.refreshBell && CV.refreshBell();
+        form.reset(); delete meet.dataset.touched; showPref(); prev.innerHTML = ''; pickType(); loaded = false; tbl.first(); CV.refreshBell && CV.refreshBell();
       }
     });
   }
@@ -149,7 +224,7 @@
       }
 
       detail.innerHTML = '<div class="grid-2">' +
-        '<div style="display:flex;flex-direction:column;gap:var(--gap)">' + reply +
+        '<div style="display:flex;flex-direction:column;gap:var(--gap)">' + reply + CV.ui.visitStudent(c, r.visits, r.visit) +
           '<div class="card"><div class="card-head"><div><h3>' + E(c.title) + '</h3><div class="cell-sub">' + E(c.concern_code) + '</div></div><div class="toolbar">' + CV.badge.sev(c.severity) + CV.badge.st(c.status) + CV.ui.anon(c) + '</div></div>' +
           '<dl class="kv"><dt>Type</dt><dd>' + E(c.category_name) + '</dd>' + (c.location ? '<dt>Location</dt><dd>' + E(c.location) + '</dd>' : '') + '<dt>Submitted</dt><dd>' + CV.fmtDate(c.created_at, true) + '</dd>' +
           '<dt>Target date</dt><dd>' + CV.ui.due(c) + '</dd><dt>Assigned to</dt><dd>' + (r.assignee ? E(r.assignee.staff_name) + (r.assignee.position ? ' · ' + E(r.assignee.position) : '') : 'Not assigned yet') + '</dd>' +
@@ -159,6 +234,7 @@
         '</div>' +
         '<div class="card"><div class="card-head"><h3>Progress</h3></div>' + CV.ui.timeline(r.timeline) + '</div></div>';
 
+      CV.ui.bindVisitStudent(detail, id, r.visit, load);
       const stars = CV.$$('.star-input button', detail);
       stars.forEach((b) => b.addEventListener('click', () => { const n = +b.dataset.n; CV.$('input[name=rating]', detail).value = n; stars.forEach((s) => s.classList.toggle('on', +s.dataset.n <= n)); }));
       const rp = CV.$('#replyForm', detail);

@@ -144,7 +144,7 @@ function render_settings_page(array $u, array $systemSections = [], array $extra
         <form class="card-pad set-form" id="availForm">
           <div class="form-msg" role="alert"></div>
           <div class="avail-pick" role="radiogroup" aria-label="Your status">
-            <?php foreach (['available' => ['Available', 'Taking new concerns', 'checkCircle'], 'busy' => ['Busy', 'Only if nobody else is free', 'clock'], 'on_leave' => ['On leave', 'No new concerns', 'x']] as $k => [$t, $d, $ic]): ?>
+            <?php foreach (['available' => ['Available', 'Taking new concerns', 'checkCircle'], 'busy' => ['Busy', 'Still gets concerns of your area', 'clock'], 'on_leave' => ['On leave', 'Admin is told to follow up', 'x']] as $k => [$t, $d, $ic]): ?>
             <label class="radio-card av-<?= $k ?>"><input type="radio" name="availability" value="<?= $k ?>" <?= $u['availability'] === $k ? 'checked' : '' ?>><span><?= icon($ic) ?><b><?= $t ?></b><small><?= $d ?></small></span></label>
             <?php endforeach; ?>
           </div>

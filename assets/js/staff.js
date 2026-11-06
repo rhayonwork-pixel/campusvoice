@@ -5,7 +5,7 @@
   const reporter = (r) => '<div class="cell-title">' + E(r.reporter_name) + '</div><div class="cell-sub">' +
     E([r.reporter_course, r.reporter_year ? 'Year ' + r.reporter_year : '', r.reporter_section].filter(Boolean).join(' · ')) + '</div>';
   const newBadge = (r) => (+r.is_new === 1 ? ' <span class="badge badge-new">New</span>' : '');
-  const titleCell = (r) => '<div class="cell-title">' + E(r.title) + newBadge(r) + CV.ui.anon(r) + '</div><div class="cell-sub">' + E(r.concern_code) + ' · ' + E(r.category_name) + (r.location ? ' · ' + E(r.location) : '') + '</div>';
+  const titleCell = (r) => '<div class="cell-title">' + E(r.title) + newBadge(r) + CV.ui.anon(r) + CV.ui.visitTag(r) + '</div><div class="cell-sub">' + E(r.concern_code) + ' · ' + E(r.category_name) + (r.location ? ' · ' + E(r.location) : '') + '</div>';
   const viewUrl = (r) => CV.url('staff/concern.php?id=' + r.concern_id);
 
   /* ---------- dashboard ---------- */
@@ -29,7 +29,20 @@
           (canStart ? '<button class="btn btn-primary btn-sm" data-start="' + x.concern_id + '">' + ic('play') + ' Start</button>' : '') + '</td></tr>';
       }).join('') : '<tr><td colspan="5"><div class="empty"><b>Nothing due today</b>You are all caught up. Check All assignments for the rest.</div></td></tr>';
     }
-    const refresh = () => Promise.all([loadSummary(), loadToday()]).catch((e) => CV.toast(e.message, 'error'));
+    async function loadVisits() {
+      const box = CV.$('#visitList'); if (!box) return;
+      const r = await CV.get('api/staff.php', { action: 'visits' });
+      CV.$('#visitCount').textContent = r.rows.length;
+      const day = (at) => new Date(String(at).replace(' ', 'T'));
+      const lab = { scheduled: 'Waiting for the student', confirmed: 'Student will come', reschedule: 'Wants another time' };
+      box.innerHTML = r.rows.length ? r.rows.map((v) => {
+        const d = day(v.scheduled_at), today = d.toDateString() === new Date().toDateString();
+        return '<a class="list-item" href="' + CV.url('staff/concern.php?id=' + v.concern_id) + '"><span class="vc-cal sm"><small>' + E(d.toLocaleDateString('en-PH', { month: 'short' })) + '</small><b>' + d.getDate() + '</b></span>' +
+          '<div class="li-main"><b>' + E(v.title) + (+v.is_anonymous ? ' <span class="badge badge-anon">Anonymous</span>' : '') + '</b><span>' + (today ? 'Today' : E(d.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' }))) + ' · ' + E(d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })) + ' · ' + E(v.place) + ' · ' + E(v.concern_code) + '</span></div>' +
+          (+v.needs_result ? '<span class="badge badge-over">Record result</span>' : '<span class="badge ' + (v.status === 'confirmed' ? 'st-Resolved' : v.status === 'reschedule' ? 'st-Additional-Info-Needed' : 'st-Pending') + '">' + lab[v.status] + '</span>') + '</a>';
+      }).join('') : '<div class="empty sm"><b>No meetings planned</b>When you schedule a face-to-face visit it appears here.</div>';
+    }
+    const refresh = () => Promise.all([loadSummary(), loadToday(), loadVisits()]).catch((e) => CV.toast(e.message, 'error'));
     today.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-start]'); if (!b) return;
       b.disabled = true;
@@ -77,9 +90,10 @@
       detail.innerHTML = '<div class="grid-2"><div style="display:flex;flex-direction:column;gap:var(--gap)">' +
         '<div class="card"><div class="card-head"><div><h3>' + E(c.title) + '</h3><div class="cell-sub">' + E(c.concern_code) + '</div></div><div class="toolbar">' + CV.badge.sev(c.severity) + CV.badge.st(c.status) + CV.ui.anon(c) + '</div></div>' +
         '<dl class="kv"><dt>Reporter</dt><dd>' + who + '</dd><dt>Type</dt><dd>' + E(c.category_name) + '</dd>' + (c.location ? '<dt>Location</dt><dd>' + E(c.location) + '</dd>' : '') + '<dt>Submitted</dt><dd>' + CV.fmtDate(c.created_at, true) + '</dd>' +
-        '<dt>Target date</dt><dd>' + CV.ui.due(c) + '</dd><dt>Description</dt><dd>' + E(c.description).replace(/\n/g, '<br>') + '</dd></dl>' + CV.ui.photos(r.photos, 'Photo') + '</div>' + form + '</div>' +
+        '<dt>Target date</dt><dd>' + CV.ui.due(c) + '</dd><dt>Description</dt><dd>' + E(c.description).replace(/\n/g, '<br>') + '</dd></dl>' + CV.ui.photos(r.photos, 'Photo') + '</div>' + CV.ui.visitStaff(c, r.visits, r.visit) + form + '</div>' +
         '<div class="card"><div class="card-head"><h3>Progress</h3></div>' + CV.ui.timeline(r.timeline) + '</div></div>';
 
+      CV.ui.bindVisitStaff(detail, 'api/staff.php', id, r.visit, load);
       const f = CV.$('#updForm', detail);
       if (f) {
         // asking the student: the note becomes the question they will see

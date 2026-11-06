@@ -27,7 +27,7 @@
     const SEV = ['Urgent', 'Major', 'Minor'];
     const COL = { Urgent: '#b42318', Major: '#b25e09', Minor: '#0f7b4f' };
     const ORDER = { Urgent: 1, Major: 2, Minor: 3 };
-    const st = { mode: 'due', cat: '', sev: { Urgent: true, Major: true, Minor: true }, asg: false, view: window.innerWidth < 700 ? 'listMo' : 'dayGridMonth', sel: null, page: 1, loaded: [] };
+    const st = { mode: 'due', cat: '', sev: { Urgent: true, Major: true, Minor: true }, asg: false, vis: true, view: window.innerWidth < 700 ? 'listMo' : 'dayGridMonth', sel: null, page: 1, loaded: [] };
     let selectedEvent = null;
     const nice = (s) => new Date(s + 'T00:00:00').toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' });
     const today = new Date().toISOString().slice(0, 10);
@@ -45,6 +45,7 @@
             extendedProps: { kind: 'sum', date, o: ORDER[k], n } });
         });
         late += d.late || 0;
+        if (st.vis && d.vis) evs.push({ id: 'vis-' + date, start: date, allDay: true, color: '#0f7f86', classNames: ['sum'], title: d.vis + (list ? ' face-to-face meeting' + (d.vis > 1 ? 's' : '') : (d.vis > 1 ? ' meetings' : ' meeting')), extendedProps: { kind: 'sum', date, o: 3.8, n: d.vis } });
         if (st.asg && d.asg) evs.push({ id: 'asg-' + date, start: date, allDay: true, color: '#5440b8', classNames: ['sum'], title: d.asg + (list ? ' assignment' + (d.asg > 1 ? 's' : '') + ' made' : ' assigned'), extendedProps: { kind: 'sum', date, o: 4 } });
         // week + list: the few most urgent concerns of the day, by name
         if (st.sev.Urgent && (st.view === 'dayGridWeek' || list) && d.top) d.top.forEach((t) => evs.push({ id: 'top-' + t.id, start: t.at, allDay: true, color: '#b42318', textColor: '#b42318', classNames: ['top'],
@@ -76,7 +77,7 @@
         return true;                                     // everything else keeps FullCalendar's normal title text
       },
       moreLinkClick: (i) => { openDay(i.date.toISOString().slice(0, 10)); return 'none'; },
-      events: (info, ok, fail) => CV.get(S, { action: 'calendar_range', start: info.startStr, end: info.endStr, mode: st.mode, category_id: st.cat, top: st.view === 'dayGridMonth' ? 0 : 1, assign: st.asg ? 1 : 0 })
+      events: (info, ok, fail) => CV.get(S, { action: 'calendar_range', start: info.startStr, end: info.endStr, mode: st.mode, category_id: st.cat, top: st.view === 'dayGridMonth' ? 0 : 1, assign: st.asg ? 1 : 0, vis: st.vis ? 1 : 0 })
         .then((r) => ok(build(r))).catch((e) => { CV.toast(e.message, 'error'); fail(e); }),
       eventDidMount: (i) => { i.el.title = i.event.title; },                   // full text on hover when a long title is cut off
       datesSet: (i) => {
@@ -108,6 +109,8 @@
     CV.$$('.lgi[data-sev]').forEach((b) => b.addEventListener('click', () => {
       st.sev[b.dataset.sev] = !st.sev[b.dataset.sev]; b.classList.toggle('on', st.sev[b.dataset.sev]); b.setAttribute('aria-pressed', String(st.sev[b.dataset.sev])); cal.refetchEvents();
     }));
+    const visBtn = CV.$('.lgi[data-vis]');
+    visBtn.addEventListener('click', () => { st.vis = !st.vis; visBtn.classList.toggle('on', st.vis); visBtn.setAttribute('aria-pressed', String(st.vis)); cal.refetchEvents(); });
     const asgBtn = CV.$('.lgi[data-asg]');
     asgBtn.addEventListener('click', () => { st.asg = !st.asg; asgBtn.classList.toggle('on', st.asg); asgBtn.setAttribute('aria-pressed', String(st.asg)); cal.refetchEvents(); });
 
@@ -126,11 +129,14 @@
         CV.$('#dmCounts').innerHTML = SEV.map((k) => '<span class="cchip ' + k + (st.sev[k] ? '' : ' off') + '"><i></i><b>' + r.counts[k] + '</b> ' + k + '</span>').join('');
         CV.$('#dmEvents').innerHTML = r.events.map((e) => '<div class="ev-row"><span class="ev-dot"></span><div><b>' + E(e.title) + '</b><small>' + new Date(e.start_at.replace(' ', 'T')).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }) + (e.notes ? ' · ' + E(e.notes) : '') + '</small></div>' +
           '<button type="button" class="icon-btn sm" data-evdel="' + e.event_id + '" aria-label="Delete event">' + CV.ui.ic('trash') + '</button></div>').join('');
+        const vl = { scheduled: 'Waiting', confirmed: 'Confirmed', reschedule: 'Another time asked', attended: 'Attended', no_show: 'Did not come' };
+        CV.$('#dmVisits').innerHTML = (r.visits && r.visits.length) ? '<div class="dm-sec">Face-to-face meetings</div>' + r.visits.map((v) =>
+          '<a class="cd-item Visit" href="' + CV.url('admin/concern.php?id=' + v.concern_id) + '"><span class="bar"></span><div class="ci-main"><b>' + E(new Date(v.scheduled_at.replace(' ', 'T')).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })) + ' · ' + E(v.place) + '</b><span>' + E(v.concern_code) + ' · ' + E(v.title) + '</span></div><div class="ci-end"><span class="badge ' + (v.status === 'attended' ? 'st-Closed' : v.status === 'confirmed' ? 'st-Resolved' : v.status === 'no_show' ? 'st-Reopened' : 'st-Pending') + '">' + vl[v.status] + '</span></div></a>').join('') : '';
         CV.$('#dmList').innerHTML = st.loaded.length ? st.loaded.map((x) =>
           '<a class="cd-item ' + x.severity + '" href="' + CV.url('admin/concern.php?id=' + x.concern_id) + '"><span class="bar"></span><div class="ci-main"><b>' + E(x.title) + '</b>' +
           '<span>' + E(x.concern_code) + ' · ' + E(x.category_name) + (x.staff_name ? ' · ' + E(x.staff_name) : ' · <u>unassigned</u>') + '</span></div>' +
           '<div class="ci-end">' + CV.badge.st(x.status) + (+x.overdue ? '<em class="late">Past target</em>' : '') + '</div></a>').join('')
-          : '<div class="empty sm"><b>Nothing here</b>' + (r.events.length ? 'Only events on this day.' : 'No concerns ' + (st.mode === 'due' ? 'are due' : 'were submitted') + ' on this day.') + '</div>';
+          : ((r.events.length || (r.visits && r.visits.length)) ? '' : '<div class="empty sm"><b>Nothing here</b>No concerns ' + (st.mode === 'due' ? 'are due' : 'were submitted') + ' on this day.</div>');
         const shown = (st.page - 1) * 10 + r.rows.length;
         CV.$('#dmMore').hidden = shown >= r.total;
         CV.$('#dmMoreBtn').textContent = 'Show more (' + (r.total - shown) + ' left)';

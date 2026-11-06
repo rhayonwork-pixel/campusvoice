@@ -71,6 +71,9 @@ switch ($action) {
             $events[] = ['id' => 'evt-' . $r['event_id'], 'title' => $r['title'], 'start' => str_replace(' ', 'T', $r['start_at']), 'end' => $r['end_at'] ? str_replace(' ', 'T', $r['end_at']) : null,
                 'color' => '#173d7a', 'extendedProps' => ['kind' => 'event', 'event_id' => (int)$r['event_id'], 'notes' => $r['notes']]];
         }
+        if (input('vis') !== '0') {                                    // face-to-face visits: one count per day
+            foreach (q("SELECT DATE(scheduled_at) d, COUNT(*) n FROM visits WHERE scheduled_at >= ? AND scheduled_at < ? AND status <> 'cancelled' GROUP BY DATE(scheduled_at)", [$from, $to])->fetchAll() as $r) $days[$r['d']]['vis'] = (int)$r['n'];
+        }
         $overdueNow = (int)q('SELECT COUNT(*) FROM concerns WHERE due_at < NOW() AND status NOT IN ' . CV_OPEN_STATUSES)->fetchColumn();
         json_out(['ok' => true, 'mode' => $mode, 'days' => $days, 'events' => $events, 'overdue_now' => $overdueNow]);
     }
@@ -96,7 +99,10 @@ switch ($action) {
                    FROM concerns c JOIN categories cat ON cat.category_id = c.category_id
                    WHERE $where ORDER BY FIELD(c.severity,'Urgent','Major','Minor'), c.due_at ASC, c.concern_id LIMIT $per OFFSET $offset", $args)->fetchAll();
         $events = q('SELECT event_id, title, start_at, end_at, notes FROM events WHERE DATE(start_at) = ? ORDER BY start_at', [$date])->fetchAll();
-        json_out(['ok' => true, 'date' => $date, 'mode' => $mode, 'counts' => $counts, 'total' => $total, 'page' => $page, 'per' => $per, 'rows' => $rows, 'events' => $events]);
+        // that day's face-to-face meetings (never the student's name)
+        $visits = q("SELECT v.visit_id, v.scheduled_at, v.place, v.status, c.concern_id, c.concern_code, c.title FROM visits v JOIN concerns c ON c.concern_id = v.concern_id
+                     WHERE DATE(v.scheduled_at) = ? AND v.status <> 'cancelled' ORDER BY v.scheduled_at LIMIT 50", [$date])->fetchAll();
+        json_out(['ok' => true, 'date' => $date, 'mode' => $mode, 'counts' => $counts, 'total' => $total, 'page' => $page, 'per' => $per, 'rows' => $rows, 'events' => $events, 'visits' => $visits]);
     }
 
     case 'event_save': {

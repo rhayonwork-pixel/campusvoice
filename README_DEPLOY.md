@@ -8,8 +8,8 @@ Everyone signs in with a **username** (their ID). All demo accounts share one pa
 
 | Role | Username |
 |---|---|
-| Admin (SASO Director) | `ADM-0001` |
-| Staff | `STF-0102` Guidance, `STF-0103` Discipline, `STF-0104` Scholarship, `STF-0105` Student Orgs, `STF-0101` Facilities |
+| Admin (Melanie M. Asidao, SASO Secretary) | `ADM-0001` |
+| Staff | `STF-0101` Richard Caranguian, `STF-0102` Hazel Candelaria Gascon, `STF-0103` Jesper Montecastro Perez, `STF-0104` Bong J. Rollan, RCrim, `STF-0105` Primo J. Siatan |
 | Student | `2023-0001`, `2023-0002`, `2022-0105`, `2024-0210` |
 
 ## Updating an EXISTING live database (SASO update)
@@ -18,6 +18,18 @@ Run once in phpMyAdmin: click your database → **SQL** tab → paste `database/
 It keeps all users and concerns, hides the old facility categories, adds the 9 SASO types, turns public sign-up off, turns routing on and sets the 3-try / 5-minute lock.
 Then: **Campus Data → Concern types** → open each type and tick its handlers, and **Users → Staff & Admins** → set each staff member's office.
 (Fresh install instead: import `schema.sql` then `seed.sql`.)
+
+**SASO areas and the real SASO people** (run last, after the two above): `database/upgrade-2026-11-saso-areas.sql`. Old generic types (Academic, Financial, Scholarship, Other ...) become inactive, the 10 SASO areas are added each with ONE owner, and the demo accounts `ADM-0001` and `STF-0101` to `STF-0105` become the real people (same usernames; each must set a new password at first sign-in; add their e-mails under Users).
+
+**Face-to-face meetings** need one more upgrade, run once in the same way: `database/upgrade-2026-11-visits.sql` (adds the `visits` table and two fields on concerns; nothing is removed).
+
+## Face-to-face meetings
+Most concerns end in a private meeting at the SASO office, so a concern can carry a visit:
+1. A student can tick **"I'd like to meet in person"** when sending a concern (pre-ticked for bullying, personal and welfare, and discipline), and say the best days.
+2. The assigned staff member (or the admin) opens the concern → **Face-to-face meeting** → picks date, time and place. The student is notified at once.
+3. The student opens the concern and taps **I'll be there**, or **I need another time** with a short reason (staff are told).
+4. After the meeting, staff tap **Student attended** (the concern moves to In Progress) or **Did not come** (the student is told a new time will be set).
+Staff see their upcoming meetings on the dashboard, and the admin sees meetings per day on the Calendar. Anonymous concerns work too: staff can schedule and record attendance without ever seeing the student's name.
 
 ## Student accounts from a masterlist
 
@@ -50,7 +62,17 @@ A visitor who has no CampusVoice account still cannot get in: Google sign-in onl
 
 ## Concern routing (who gets what)
 
-Each concern type has handlers (Campus Data). With **Settings → Concern rules → Route new concerns automatically** on, a new concern goes straight to the least-busy available handler (busy staff only if nobody is free, staff on leave never). Types without handlers — and every concern when routing is off — wait in the admin's Assignment Queue. Admins can still reassign anything.
+Every concern type is a SASO area and has ONE owner (Campus Data → Concern types):
+
+| Concern type | Owner |
+|---|---|
+| Mental health, Guidance and counseling, Psychological impact, Gender development | Richard Caranguian (Student Affairs and Service Office) |
+| Student organizations | Hazel Candelaria Gascon |
+| Sports | Jesper Montecastro Perez |
+| Performing arts | Primo J. Siatan |
+| Student discipline and behavior, Safety and security, Facility | Bong J. Rollan, RCrim |
+
+With **Settings → Concern rules → Route new concerns automatically** on, a new concern goes straight to the owner of its type. **Busy never moves it to someone else**: it only matters when a type has more than one handler (then the free one is preferred). If the owner is on leave, the concern still waits with the owner and the admin gets a notice to follow up. Change owners any time in Campus Data; with routing off, concerns wait in the admin's Assignment Queue.
 
 ## Anonymous concerns
 Staff see only "Anonymous Student" plus course/year/section. The SASO admin sees the real sender (marked as anonymous). CSV exports stay masked.
