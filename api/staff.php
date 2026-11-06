@@ -7,6 +7,7 @@ require __DIR__ . '/../includes/visits.php';
 $action = input('action');
 $u = api_guard(['staff'], !in_array($action, ['summary', 'today', 'list', 'detail', 'visits', 'calendar_month'], true));
 $uid = (int)$u['user_id'];
+auto_close_resolved();
 
 /** Assignment row for this staff member on a concern, or stop. */
 function my_assignment(int $concernId, int $uid): array
@@ -123,8 +124,9 @@ switch ($action) {
     case 'update': {
         $id = input_int('id');
         $a = my_assignment($id, $uid);
-        if ($a['assignment_status'] !== 'active') json_fail('This concern is no longer active for you.');
         $c = q('SELECT * FROM concerns WHERE concern_id = ?', [$id])->fetch();
+        if (concern_locked($c)) json_fail(CV_LOCKED_MSG, 409);
+        if ($a['assignment_status'] !== 'active') json_fail('This concern is no longer active for you.');
         $new = input('status'); $note = input('note');
         if (!in_array($new, ['In Progress', 'Waiting for Resources', 'Additional Info Needed', 'Resolved'], true)) json_fail('Choose a valid status.');
         if ($new === 'Additional Info Needed' && mb_strlen($note) < 10) json_fail('Tell the student exactly what information you need (at least 10 characters).');
@@ -142,6 +144,7 @@ switch ($action) {
             if ($new === 'Resolved') {
                 q("UPDATE concerns SET status = 'Resolved', resolved_at = NOW() WHERE concern_id = ?", [$id]);
                 q("UPDATE assignments SET assignment_status = 'completed', completed_at = NOW() WHERE assignment_id = ?", [$a['assignment_id']]);
+                cancel_open_visits($id);
             } else {
                 q('UPDATE concerns SET status = ? WHERE concern_id = ?', [$new, $id]);
             }
@@ -160,6 +163,13 @@ switch ($action) {
         if ($new === 'Resolved') notify_role('admin', 'Concern resolved', "{$c['concern_code']} was marked Resolved by " . display_name($u) . '.', $id);
         audit($new === 'Resolved' ? 'concern_resolved' : ($new === 'Additional Info Needed' ? 'info_requested' : 'concern_updated'), "{$c['concern_code']} set to {$new}");
         json_out(['ok' => true, 'message' => $new === 'Resolved' ? 'Great — marked as resolved.' : ($new === 'Additional Info Needed' ? 'The student was asked for more information.' : 'Update saved.')]);
+    }
+
+    case 'reopen': {
+        $id = input_int('id');
+        my_assignment($id, $uid);                       // only the staff member who handled it
+        $c = q('SELECT * FROM concerns WHERE concern_id = ?', [$id])->fetch();
+        reopen_concern($c, $u, input('reason'));
     }
 
     default:

@@ -87,12 +87,13 @@
         '<div class="field"><span class="label">Proof photo <span class="hint">(optional)</span></span><label class="dropzone">' + ic('camera') + '<span id="proofName">Click to add a photo</span><input type="file" name="proof" accept="image/jpeg,image/png,image/webp"></label></div>' +
         '<button class="btn btn-primary" type="submit">' + ic('check') + ' Save update</button></form></div>' : '<div class="note">' + ic('checkCircle') + '<div>This concern is no longer active for you.</div></div>';
 
-      detail.innerHTML = '<div class="grid-2"><div style="display:flex;flex-direction:column;gap:var(--gap)">' +
+      detail.innerHTML = CV.ui.stepper(c.status) + '<div class="grid-2"><div style="display:flex;flex-direction:column;gap:var(--gap)">' +
         '<div class="card"><div class="card-head"><div><h3>' + E(c.title) + '</h3><div class="cell-sub">' + E(c.concern_code) + '</div></div><div class="toolbar">' + CV.badge.sev(c.severity) + CV.badge.st(c.status) + CV.ui.anon(c) + '</div></div>' +
         '<dl class="kv"><dt>Reporter</dt><dd>' + who + '</dd><dt>Type</dt><dd>' + E(c.category_name) + '</dd>' + (c.location ? '<dt>Location</dt><dd>' + E(c.location) + '</dd>' : '') + '<dt>Submitted</dt><dd>' + CV.fmtDate(c.created_at, true) + '</dd>' +
-        '<dt>Target date</dt><dd>' + CV.ui.due(c) + '</dd><dt>Description</dt><dd>' + E(c.description).replace(/\n/g, '<br>') + '</dd></dl>' + CV.ui.photos(r.photos, 'Photo') + '</div>' + CV.ui.visitStaff(c, r.visits, r.visit) + form + '</div>' +
+        '<dt>Target date</dt><dd>' + CV.ui.due(c) + '</dd><dt>Description</dt><dd>' + E(c.description).replace(/\n/g, '<br>') + '</dd></dl>' + CV.ui.photos(r.photos, 'Photo') + '</div>' + CV.ui.lockedBox(c) + CV.ui.visitStaff(c, r.visits, r.visit) + form + '</div>' +
         '<div class="card"><div class="card-head"><h3>Progress</h3></div>' + CV.ui.timeline(r.timeline) + '</div></div>';
 
+      CV.ui.bindLocked(detail, 'api/staff.php', id, load);
       CV.ui.bindVisitStaff(detail, 'api/staff.php', id, r.visit, load);
       const f = CV.$('#updForm', detail);
       if (f) {

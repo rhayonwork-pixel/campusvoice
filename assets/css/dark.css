@@ -145,3 +145,6 @@ html[data-theme="dark"] { --dot: rgba(169, 195, 245, .09); }
 :root[data-theme="dark"] .mc-rel { background: #3a2f12; color: #f0c96a; }
 :root[data-theme="dark"] .mc-day.has { background: #2a2a1d; }
 :root[data-theme="dark"] .mc-day.is-sel { background: var(--gold); color: #0a1c40; }
+
+.lock-card .lock-ic { color: #f0c96a; }
+html:not([data-theme="dark"]) .lock-card .lock-ic { color: #7a5200; }

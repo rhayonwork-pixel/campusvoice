@@ -47,7 +47,7 @@ function visit_staff_action(array $u, string $action): void
     if ($u['role'] === 'staff' && !q("SELECT 1 FROM assignments WHERE concern_id = ? AND staff_id = ? AND assignment_status = 'active'", [$id, $u['user_id']])->fetchColumn()) {
         json_fail('This concern is not assigned to you.', 403);
     }
-    if (in_array($c['status'], ['Closed', 'Cancelled'], true)) json_fail('This concern is closed.');
+    if (concern_locked($c)) json_fail(CV_LOCKED_MSG);
     $uid = (int)$u['user_id'];
     $code = $c['concern_code'];
 

@@ -131,22 +131,23 @@
       catch (err) { detail.innerHTML = '<div class="card"><div class="empty"><b>Not found</b>' + E(err.message) + '</div></div>'; }
     }
     function render(r) {
-      const c = r.concern, a = r.assignment, closed = ['Closed', 'Cancelled'].includes(c.status);
+      const c = r.concern, a = r.assignment, closed = ['Resolved', 'Closed', 'Cancelled'].includes(c.status);
       const anon = +c.is_anonymous === 1;
       const who = '<b>' + E(c.reporter_name) + '</b><br><span class="cell-sub">' + [c.reporter_school_id, c.reporter_email, c.reporter_contact].filter(Boolean).map(E).join(' · ') + '</span>' +
         '<br><span class="cell-sub">' + ctx(c) + '</span>' +
         (anon ? '<div class="anon-note">' + ic('eyeOff') + '<span>Sent anonymously. Only admins see this name; staff see <b>Anonymous Student</b>.</span></div>' : '');
       const actions = closed ? '' : '<button class="btn btn-primary btn-sm" id="doAssign">' + ic('users') + ' ' + (a ? 'Reassign' : 'Assign') + '</button> <button class="btn btn-ghost btn-sm" data-open-modal="statusModal">' + ic('edit') + ' Change status</button> ' +
         '<select class="select" id="sevSel" aria-label="Severity" style="width:auto;padding:.4rem .7rem">' + ['Minor', 'Major', 'Urgent'].map((s) => '<option' + (s === c.severity ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>';
-      detail.innerHTML = '<div class="grid-2"><div style="display:flex;flex-direction:column;gap:var(--gap)">' +
+      detail.innerHTML = CV.ui.stepper(c.status) + '<div class="grid-2"><div style="display:flex;flex-direction:column;gap:var(--gap)">' +
         '<div class="card"><div class="card-head"><div><h3>' + E(c.title) + '</h3><div class="cell-sub">' + E(c.concern_code) + '</div></div><div class="toolbar">' + CV.badge.sev(c.severity) + CV.badge.st(c.status) + CV.ui.anon(c) + '</div></div>' +
         '<dl class="kv"><dt>Reporter</dt><dd>' + who + '</dd><dt>Type</dt><dd>' + E(c.category_name) + '</dd>' + (c.location ? '<dt>Location</dt><dd>' + E(c.location) + '</dd>' : '') + '<dt>Submitted</dt><dd>' + CV.fmtDate(c.created_at, true) + '</dd>' +
         '<dt>Target date</dt><dd>' + CV.ui.due(c) + '</dd><dt>Assigned to</dt><dd>' + (a ? E(a.staff_name) : 'Not assigned') + '</dd><dt>Description</dt><dd>' + E(c.description).replace(/\n/g, '<br>') + '</dd>' +
         (r.feedback ? '<dt>Rating</dt><dd>' + CV.ui.stars(+r.feedback.rating) + (r.feedback.comment ? '<br>' + E(r.feedback.comment) : '') + '</dd>' : '') + '</dl>' +
         CV.ui.photos(r.photos, 'Photo') + (actions ? '<div class="card-head" style="border-top:1px solid var(--line);border-bottom:0"><span class="cell-sub">Actions</span><div class="toolbar">' + actions + '</div></div>' : '') + '</div>' +
-        CV.ui.visitStaff(c, r.visits, r.visit) + '<div class="card"><div class="card-head"><h3>Assignment history</h3></div>' + (r.history.length ? '<div class="list">' + r.history.map((h) => '<div class="list-item"><div class="li-main"><b>' + E(h.staff_name) + (+h.auto ? ' <span class="auto-tag">' + ic('route') + ' auto</span>' : '') + '</b><span>' + CV.fmtDate(h.assigned_at, true) + (h.reason ? ' · ' + E(h.reason) : '') + '</span></div><span class="badge st-' + (h.assignment_status === 'active' ? 'In-Progress' : h.assignment_status === 'completed' ? 'Resolved' : 'Cancelled') + '">' + E(h.assignment_status) + '</span></div>').join('') + '</div>' : '<div class="empty">Not assigned yet.</div>') + '</div></div>' +
+        CV.ui.lockedBox(c) + CV.ui.visitStaff(c, r.visits, r.visit) + '<div class="card"><div class="card-head"><h3>Assignment history</h3></div>' + (r.history.length ? '<div class="list">' + r.history.map((h) => '<div class="list-item"><div class="li-main"><b>' + E(h.staff_name) + (+h.auto ? ' <span class="auto-tag">' + ic('route') + ' auto</span>' : '') + '</b><span>' + CV.fmtDate(h.assigned_at, true) + (h.reason ? ' · ' + E(h.reason) : '') + '</span></div><span class="badge st-' + (h.assignment_status === 'active' ? 'In-Progress' : h.assignment_status === 'completed' ? 'Resolved' : 'Cancelled') + '">' + E(h.assignment_status) + '</span></div>').join('') + '</div>' : '<div class="empty">Not assigned yet.</div>') + '</div></div>' +
         '<div class="card"><div class="card-head"><h3>Progress</h3></div>' + CV.ui.timeline(r.timeline) + '</div></div>';
 
+      CV.ui.bindLocked(detail, API, id, load);
       CV.ui.bindVisitStaff(detail, API, id, r.visit, load);
       const da = CV.$('#doAssign', detail);
       if (da) da.addEventListener('click', () => { afterAssign = load; openAssign(Object.assign({ staff_id: a ? a.staff_id : 0 }, c), !!a); });

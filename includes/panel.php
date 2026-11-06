@@ -43,6 +43,7 @@ function panel_open(array $user, string $title, string $active, array $css = [])
 {
     $role = $user['role'];
     $initial = strtoupper(mb_substr($user['first_name'], 0, 1));
+    $locked = (int)($user['must_change_password'] ?? 0) === 1;   // first sign-in: only Settings is open until the password is changed
     html_head($title, array_merge(['panel.css'], $css), 'panel role-' . $role);
     icon_sprite();
     ?>
@@ -61,17 +62,18 @@ function panel_open(array $user, string $title, string $active, array $css = [])
 <?php if ($kids):
         $inGroup = false; foreach ($kids as $k) if ($active === $k[0]) $inGroup = true; ?>
       <div class="nav-grp<?= $inGroup ? ' open' : '' ?>">
-        <button class="nav-i nav-parent<?= $inGroup ? ' on' : '' ?>" type="button" data-tip="<?= e($label) ?>" data-first="<?= e(url($role . '/' . $kids[0][0])) ?>" aria-expanded="<?= $inGroup ? 'true' : 'false' ?>">
+        <button class="nav-i nav-parent<?= $inGroup ? ' on' : '' ?><?= $locked ? ' is-locked' : '' ?>" type="button"<?= $locked ? ' disabled' : '' ?> data-tip="<?= e($label) ?>" data-first="<?= e(url($role . '/' . $kids[0][0])) ?>" aria-expanded="<?= $inGroup ? 'true' : 'false' ?>">
           <?= icon($ic) ?><span class="lbl"><?= e($label) ?></span><span class="nav-chev"><?= icon('chevD') ?></span>
         </button>
         <div class="nav-sub"><div class="nav-sub-in">
 <?php foreach ($kids as [$kfile, $klabel, $kic]): ?>
-          <a class="nav-s<?= $active === $kfile ? ' on' : '' ?>" href="<?= e(url($role . '/' . $kfile)) ?>" <?= $active === $kfile ? 'aria-current="page"' : '' ?>><span class="lbl"><?= e($klabel) ?></span></a>
+          <a class="nav-s<?= $active === $kfile ? ' on' : '' ?><?= $locked ? ' is-locked' : '' ?>" href="<?= e(url($role . '/' . $kfile)) ?>"<?= $locked ? ' tabindex="-1" aria-disabled="true"' : '' ?> <?= $active === $kfile ? 'aria-current="page"' : '' ?>><span class="lbl"><?= e($klabel) ?></span></a>
 <?php endforeach; ?>
         </div></div>
       </div>
 <?php continue; endif; ?>
-      <a class="nav-i<?= $active === $file ? ' on' : '' ?>" href="<?= e(url($role . '/' . $file)) ?>" data-tip="<?= e($label) ?>" <?= $active === $file ? 'aria-current="page"' : '' ?>>
+      <?php $lk = $locked && $file !== 'settings.php'; ?>
+      <a class="nav-i<?= $active === $file ? ' on' : '' ?><?= $lk ? ' is-locked' : '' ?>" href="<?= e(url($role . '/' . $file)) ?>"<?= $lk ? ' tabindex="-1" aria-disabled="true"' : '' ?> data-tip="<?= e($lk ? $label . ' (opens after you change your password)' : $label) ?>" <?= $active === $file ? 'aria-current="page"' : '' ?>>
         <?= icon($ic) ?><span class="lbl"><?= e($label) ?></span>
 <?php if ($file === 'notifications.php'): ?><span class="nav-count" id="navCount" hidden>0</span><?php endif; ?>
       </a>

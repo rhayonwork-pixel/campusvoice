@@ -37,7 +37,7 @@ auth_open('Welcome back', 'Sign in to your CampusVoice portal.');
             <button type="button" class="reveal" data-reveal="password">SHOW</button>
           </div>
         </div>
-        <div class="auth-row"><span class="tries" id="tries" aria-live="polite" hidden></span><a href="<?= e(url('forgot-password.php')) ?>">Forgot password?</a></div>
+        <div class="auth-row"><label class="rm-me" for="remember"><input type="checkbox" id="remember" name="remember" value="1"> Remember me</label><span class="tries" id="tries" aria-live="polite" hidden></span><a href="<?= e(url('forgot-password.php')) ?>">Forgot password?</a></div>
         <?= turnstile_widget() ?>
         <button class="btn btn-primary btn-block" type="submit">Sign in</button>
       </form>

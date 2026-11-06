@@ -43,6 +43,9 @@ CREATE TABLE users (
   google_email VARCHAR(190) NULL,
   google_linked_at DATETIME NULL,
   last_login_at DATETIME NULL,
+  remember_selector CHAR(18) NULL UNIQUE,           -- "Remember me" cookie: selector + hashed validator, one device per account
+  remember_hash CHAR(64) NULL,
+  remember_expires DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_users_role (role, account_status),

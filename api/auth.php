@@ -47,12 +47,13 @@ switch ($action) {
 
         q('DELETE FROM login_attempts WHERE email = ?', [$key]);
         establish_session($user);
+        if (input('remember') === '1') remember_issue((int)$user['user_id']); else remember_forget((int)$user['user_id']);
         audit('login', 'Signed in', $user);
         json_out(['ok' => true, 'redirect' => url(home_for($user['role']))]);
     }
 
     case 'logout': {
-        if ($u = current_user()) audit('logout', 'Signed out', $u);
+        if ($u = current_user()) { audit('logout', 'Signed out', $u); remember_forget((int)$u['user_id']); }
         destroy_session();
         json_out(['ok' => true, 'redirect' => url('login.php')]);
     }
@@ -139,6 +140,7 @@ switch ($action) {
             json_fail('That reset link or code is invalid or has expired.', 400);
         }
         q('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE user_id = ?', [password_hash($pw, PASSWORD_DEFAULT), $row['user_id']]);
+        remember_forget((int)$row['user_id']);
         q('UPDATE password_resets SET used_at = NOW() WHERE user_id = ?', [$row['user_id']]);
         q('DELETE FROM login_attempts WHERE email = ?', ['uid:' . $row['user_id']]);
         $target = q('SELECT * FROM users WHERE user_id = ?', [$row['user_id']])->fetch();

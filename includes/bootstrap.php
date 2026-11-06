@@ -216,6 +216,7 @@ function current_user(): ?array
     static $user = false;
     if ($user === false) {
         $user = null;
+        if (empty($_SESSION['uid']) && !empty($_COOKIE['cv_remember'])) { require_once __DIR__ . '/auth.php'; remember_login(); }
         if (!empty($_SESSION['uid'])) {
             $row = q('SELECT * FROM users WHERE user_id = ? AND account_status = "active"', [(int)$_SESSION['uid']])->fetch();
             if ($row) {

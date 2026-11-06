@@ -58,7 +58,8 @@
 
   /** Staff + admin card: set a date, then record whether the student came. */
   CV.ui.visitStaff = (c, visits, active) => {
-    const closed = ['Closed', 'Cancelled'].includes(c.status);
+    if (['Resolved', 'Closed', 'Cancelled'].includes(c.status)) return '';   // finished: nothing to schedule
+    const closed = ['Resolved', 'Closed', 'Cancelled'].includes(c.status);
     const hist = visits.filter((v) => !active || v.visit_id !== active.visit_id).slice(0, 4);
     let h = '<div class="card visit-card" id="visitCard"><div class="card-head"><h3>' + ic('pin') + ' Face-to-face meeting</h3>' + (active ? vstat(active.status) : '') + '</div><div class="card-pad vc-body">';
     if (+c.wants_meeting && !active) h += '<div class="vc-banner">' + ic('message') + '<div><b>The student asked to meet in person.</b>' + (c.meeting_pref ? '<span>Best time: ' + E(c.meeting_pref) + '</span>' : '') + '</div></div>';
@@ -108,6 +109,7 @@
 
   /** Student card: see the date, confirm, or ask for another time. */
   CV.ui.visitStudent = (c, visits, active) => {
+    if (['Resolved', 'Closed', 'Cancelled'].includes(c.status)) return '';
     const last = visits.find((v) => v.status === 'attended');
     if (!active && !(+c.wants_meeting) && !last) return '';
     let h = '<div class="card visit-card' + (active ? ' is-live' : '') + '" id="visitCard"><div class="card-head"><h3>' + ic('pin') + ' Face-to-face meeting</h3>' + (active ? vstat(active.status) : '') + '</div><div class="card-pad vc-body">';
@@ -142,4 +144,39 @@
         validate: (f) => (f.reason.value.trim().length < 5 ? 'Please tell us briefly why.' : ''), success: (res) => { CV.toast(res.message); reload(); } });
     }
   };
+
+  /* ---------- progress step bar: shows where a concern is AND where it ends ---------- */
+  CV.ui.stepper = (status) => {
+    if (status === 'Cancelled') return '<div class="stp-cancel"><span class="badge st-Cancelled">Cancelled</span> This concern was cancelled. Nothing more to do.</div>';
+    const idx = { Submitted: 0, Pending: 0, 'Under Review': 0, Reopened: 0, Assigned: 1, 'In Progress': 2, 'Waiting for Resources': 2, 'Additional Info Needed': 2, Resolved: 3, Closed: 4 }[status];
+    if (idx === undefined) return '';
+    const steps = ['Received', 'Assigned', 'In progress', 'Resolved', 'Closed'];
+    const hint = { Reopened: 'Reopened by the student. It goes back to the owner.', 'Additional Info Needed': 'Waiting for the student to reply.', 'Waiting for Resources': 'Waiting for resources.',
+      Resolved: 'Waiting for the student to rate it (closes by itself after 3 days) or reopen it.', Closed: 'Finished. Nothing more to do.' }[status] || '';
+    return '<div class="stp-wrap"><ol class="stp" aria-label="Progress">' + steps.map((t, i) => {
+      const cls = idx === 4 || i < idx ? 'done' : i === idx ? 'now' : '';
+      return '<li class="' + cls + '"><span class="stp-dot">' + (cls === 'done' ? ic('check') : i + 1) + '</span><b>' + t + '</b></li>';
+    }).join('') + '</ol>' + (hint ? '<p class="stp-hint">' + hint + '</p>' : '') + '</div>';
+  };
+
+
+  /* ---------- locked concern (staff + admin): no edits until it is reopened ---------- */
+  CV.ui.lockedBox = (c) => {
+    if (!['Resolved', 'Closed'].includes(c.status)) return '';
+    return '<div class="card lock-card" id="lockCard"><div class="card-pad"><div class="lock-row"><span class="lock-ic">' + ic('lock') + '</span><div><b>This concern is ' + (c.status === 'Closed' ? 'closed' : 'resolved') + ' and locked</b>' +
+      '<p>Nothing can be changed until you reopen it. Reopening sends it back to work and tells the student.</p></div>' +
+      '<button type="button" class="btn btn-ghost btn-sm" id="lockOpen">' + ic('refresh') + ' Reopen</button></div>' +
+      '<form class="lock-form" id="lockForm" hidden novalidate><div class="form-msg" role="alert"></div><div class="field"><label for="lockWhy">Why is it being reopened?</label>' +
+      '<textarea class="textarea" id="lockWhy" name="reason" maxlength="500" placeholder="e.g. The student came back, the problem is still there."></textarea></div>' +
+      '<button class="btn btn-primary" type="submit">' + ic('refresh') + ' Reopen concern</button></form></div></div>';
+  };
+  CV.ui.bindLocked = (root, api, id, reload) => {
+    const open = CV.$('#lockOpen', root), form = CV.$('#lockForm', root);
+    if (!open || !form) return;
+    open.addEventListener('click', () => { form.hidden = !form.hidden; if (!form.hidden) CV.$('#lockWhy', root).focus(); });
+    const hid = document.createElement('input'); hid.type = 'hidden'; hid.name = 'id'; hid.value = id; form.appendChild(hid);
+    CV.bindForm(form, { url: api, action: 'reopen', busy: 'Reopening…', noRedirect: true,
+      validate: (f) => (f.reason.value.trim().length < 5 ? 'Please tell us why (at least 5 characters).' : ''), success: (res) => { CV.toast(res.message); reload(); } });
+  };
+
 })();

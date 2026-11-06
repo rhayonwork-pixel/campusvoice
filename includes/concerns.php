@@ -7,6 +7,67 @@
  * staff have context. Only the admin sees who the anonymous sender is (reporter_columns(true)).
  */
 
+const CV_AUTO_CLOSE_DAYS = 3;
+const CV_LOCKED_MSG = 'This concern is resolved, so it is locked. Reopen it first if you need to change something.';
+
+/** Meetings that never happened are cancelled when the concern ends, so they leave every calendar and dashboard. */
+function cancel_open_visits(int $concernId): void
+{
+    try {
+        q("UPDATE visits SET status = 'cancelled' WHERE concern_id = ? AND status IN ('scheduled','confirmed','reschedule')", [$concernId]);
+    } catch (Throwable $e) { error_log('cancel_open_visits: ' . $e->getMessage()); }
+}
+
+/** Resolved, closed and cancelled concerns cannot be edited until someone reopens them. */
+function concern_locked(array $c): bool
+{
+    return in_array($c['status'], ['Resolved', 'Closed', 'Cancelled'], true);
+}
+
+/**
+ * Staff or admin reopens a resolved/closed concern (a reason is required). The last owner gets it back as "In Progress";
+ * with no previous owner it goes back to the queue as "Reopened".
+ */
+function reopen_concern(array $c, array $by, string $reason): void
+{
+    if (!in_array($c['status'], ['Resolved', 'Closed'], true)) json_fail('Only a resolved or closed concern can be reopened.');
+    if (mb_strlen($reason) < 5) json_fail('Please tell us why it is being reopened (at least 5 characters).');
+    $id = (int)$c['concern_id'];
+    $pdo = db(); $pdo->beginTransaction();
+    try {
+        $last = q("SELECT assignment_id, staff_id FROM assignments WHERE concern_id = ? AND assignment_status = 'completed' ORDER BY assigned_at DESC, assignment_id DESC LIMIT 1", [$id])->fetch();
+        $status = $last ? 'In Progress' : 'Reopened';
+        q('UPDATE concerns SET status = ?, resolved_at = NULL, closed_at = NULL, due_at = NOW() + INTERVAL ? HOUR WHERE concern_id = ?', [$status, severity_hours($c['severity']), $id]);
+        if ($last) q("UPDATE assignments SET assignment_status = 'active', completed_at = NULL, seen_at = NULL WHERE assignment_id = ?", [$last['assignment_id']]);
+        add_update($id, (int)$by['user_id'], $status, 'Reopened', 'Reopened by ' . display_name($by) . ': ' . mb_substr($reason, 0, 500));
+        $pdo->commit();
+    } catch (Throwable $ex) { $pdo->rollBack(); error_log('reopen: ' . $ex->getMessage()); json_fail('Could not reopen the concern.', 500); }
+    notify((int)$c['student_id'], 'Concern reopened', "{$c['concern_code']} was reopened by SASO so it can be worked on again.", $id);
+    if ($last && (int)$last['staff_id'] !== (int)$by['user_id']) notify((int)$last['staff_id'], 'Concern reopened', "{$c['concern_code']} was reopened and is back with you.", $id, true);
+    if ($by['role'] === 'staff') notify_role('admin', 'Concern reopened', "{$c['concern_code']} was reopened by " . display_name($by) . '.', $id);
+    audit('concern_reopened', "{$c['concern_code']} reopened: " . mb_substr($reason, 0, 120));
+    json_out(['ok' => true, 'message' => 'Concern reopened.']);
+}
+
+
+/**
+ * A resolved concern the student never answered must not hang forever: close it after a few days.
+ * (No cron on free hosting, so this runs lazily whenever someone uses the system.)
+ */
+function auto_close_resolved(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $ids = q("SELECT concern_id FROM concerns WHERE status = 'Resolved' AND resolved_at IS NOT NULL AND resolved_at < (NOW() - INTERVAL ? DAY) LIMIT 50", [CV_AUTO_CLOSE_DAYS])->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($ids as $id) {
+            q("UPDATE concerns SET status = 'Closed', closed_at = NOW() WHERE concern_id = ? AND status = 'Resolved'", [$id]);
+            add_update((int)$id, null, 'Closed', 'Closed', 'Closed automatically after ' . CV_AUTO_CLOSE_DAYS . ' days with no reply from the student.');
+        }
+    } catch (Throwable $e) { error_log('auto_close_resolved: ' . $e->getMessage()); }
+}
+
 const CV_OPEN_STATUSES = "('Resolved','Closed','Cancelled')";
 /** Waiting for someone to pick it up (admin queue when nobody is assigned). 'Submitted' is the pre-SASO name of 'Pending'. */
 const CV_QUEUE_STATUSES = "('Submitted','Pending','Under Review','Reopened')";

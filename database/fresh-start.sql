@@ -9,34 +9,46 @@
 --
 --  HOW: export a BACKUP first (it cannot be undone), click your database in phpMyAdmin,
 --  SQL tab, paste this whole file, Go. The tables must already exist (they do on your site).
+--  If it stops half-way with an error, just run the whole file again: it is safe to repeat.
 --  Then delete the files inside the "uploads" folder on the server (old test photos).
 --
 --  SIGN IN AFTER:  username ADM-0001  ·  password CampusVoice#2026
 --  (admin and staff must choose their own password at first sign-in)
 -- =====================================================================
 SET NAMES utf8mb4;
-SET FOREIGN_KEY_CHECKS = 0;
 
-TRUNCATE TABLE visits;
-TRUNCATE TABLE photos;
-TRUNCATE TABLE feedback;
-TRUNCATE TABLE notifications;
-TRUNCATE TABLE concern_updates;
-TRUNCATE TABLE assignments;
-TRUNCATE TABLE concerns;
-TRUNCATE TABLE category_handlers;
-TRUNCATE TABLE categories;
-TRUNCATE TABLE locations;
-TRUNCATE TABLE events;
-TRUNCATE TABLE audit_logs;
-TRUNCATE TABLE login_attempts;
-TRUNCATE TABLE password_resets;
-TRUNCATE TABLE working_hours;
-TRUNCATE TABLE settings;
-TRUNCATE TABLE users;
-TRUNCATE TABLE departments;
+-- Delete child tables first, so foreign keys never get in the way (works even with key checks ON).
+DELETE FROM visits;
+DELETE FROM photos;
+DELETE FROM feedback;
+DELETE FROM notifications;
+DELETE FROM concern_updates;
+DELETE FROM assignments;
+DELETE FROM concerns;
+DELETE FROM category_handlers;
+DELETE FROM categories;
+DELETE FROM locations;
+DELETE FROM events;
+DELETE FROM audit_logs;
+DELETE FROM login_attempts;
+DELETE FROM password_resets;
+DELETE FROM working_hours;
+DELETE FROM settings;
+DELETE FROM users;
+DELETE FROM departments;
 
-SET FOREIGN_KEY_CHECKS = 1;
+-- numbering starts again from 1 (first concern becomes CV-...-0001)
+ALTER TABLE visits AUTO_INCREMENT = 1;
+ALTER TABLE photos AUTO_INCREMENT = 1;
+ALTER TABLE feedback AUTO_INCREMENT = 1;
+ALTER TABLE notifications AUTO_INCREMENT = 1;
+ALTER TABLE concern_updates AUTO_INCREMENT = 1;
+ALTER TABLE assignments AUTO_INCREMENT = 1;
+ALTER TABLE concerns AUTO_INCREMENT = 1;
+ALTER TABLE events AUTO_INCREMENT = 1;
+ALTER TABLE audit_logs AUTO_INCREMENT = 1;
+ALTER TABLE login_attempts AUTO_INCREMENT = 1;
+ALTER TABLE password_resets AUTO_INCREMENT = 1;
 
 -- ---------- offices ----------
 INSERT INTO departments (department_id, department_name, department_type) VALUES

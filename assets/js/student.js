@@ -199,7 +199,7 @@
     function render(r) {
       const c = r.concern, done = c.status === 'Resolved' || c.status === 'Closed';
       let actions = '';
-      if (c.status === 'Resolved') actions += '<button class="btn btn-primary btn-sm" data-act="confirm">' + ic('checkCircle') + ' Confirm resolved</button> ';
+      if (c.status === 'Resolved') actions += '<button class="btn btn-primary btn-sm" data-act="confirm">' + ic('checkCircle') + ' Close without rating</button> ';
       if (done) actions += '<button class="btn btn-ghost btn-sm" data-open-modal="reopenModal">' + ic('refresh') + ' Reopen</button>';
       if (['Submitted', 'Pending', 'Assigned'].includes(c.status)) actions += '<button class="btn btn-ghost btn-sm" data-act="cancel">' + ic('x') + ' Cancel concern</button>';
       // the office asked for more information → reply box right on top
@@ -215,22 +215,22 @@
 
       let fb = '';
       if (done && !r.feedback) {
-        fb = '<div class="card"><div class="card-head"><h3>Rate this resolution</h3></div><form class="card-pad" id="fbForm"><div class="form-msg" role="alert"></div>' +
+        fb = '<div class="card' + (c.status === 'Resolved' ? ' card-hot' : '') + '"><div class="card-head"><h3>' + (c.status === 'Resolved' ? 'Resolved. Rate it to close this concern' : 'Rate this resolution') + '</h3></div><form class="card-pad" id="fbForm"><div class="form-msg" role="alert"></div>' +
           '<div class="star-input" role="radiogroup" aria-label="Rating">' + [1, 2, 3, 4, 5].map((n) => '<button type="button" data-n="' + n + '" aria-label="' + n + ' star">' + ic('star') + '</button>').join('') + '</div>' +
-          '<input type="hidden" name="rating" value=""><div class="field" style="margin-top:14px"><label for="fbc">Comment (optional)</label><textarea class="textarea" id="fbc" name="comment" maxlength="500"></textarea></div>' +
-          '<button class="btn btn-primary" type="submit">' + ic('send') + ' Send feedback</button></form></div>';
+          '<input type="hidden" name="id" value="' + c.concern_id + '"><input type="hidden" name="rating" value=""><div class="field" style="margin-top:14px"><label for="fbc">Comment (optional)</label><textarea class="textarea" id="fbc" name="comment" maxlength="500"></textarea></div>' +
+          '<button class="btn btn-primary" type="submit">' + ic('send') + (c.status === 'Resolved' ? ' Rate and close' : ' Send feedback') + '</button></form></div>';
       } else if (r.feedback) {
         fb = '<div class="card"><div class="card-head"><h3>Your feedback</h3></div><div class="card-pad">' + CV.ui.stars(+r.feedback.rating) + (r.feedback.comment ? '<p style="margin-top:8px">' + E(r.feedback.comment) + '</p>' : '') + '</div></div>';
       }
 
-      detail.innerHTML = '<div class="grid-2">' +
-        '<div style="display:flex;flex-direction:column;gap:var(--gap)">' + reply + CV.ui.visitStudent(c, r.visits, r.visit) +
+      detail.innerHTML = CV.ui.stepper(c.status) + '<div class="grid-2">' +
+        '<div style="display:flex;flex-direction:column;gap:var(--gap)">' + (c.status === 'Resolved' ? fb : '') + reply + CV.ui.visitStudent(c, r.visits, r.visit) +
           '<div class="card"><div class="card-head"><div><h3>' + E(c.title) + '</h3><div class="cell-sub">' + E(c.concern_code) + '</div></div><div class="toolbar">' + CV.badge.sev(c.severity) + CV.badge.st(c.status) + CV.ui.anon(c) + '</div></div>' +
           '<dl class="kv"><dt>Type</dt><dd>' + E(c.category_name) + '</dd>' + (c.location ? '<dt>Location</dt><dd>' + E(c.location) + '</dd>' : '') + '<dt>Submitted</dt><dd>' + CV.fmtDate(c.created_at, true) + '</dd>' +
           '<dt>Target date</dt><dd>' + CV.ui.due(c) + '</dd><dt>Assigned to</dt><dd>' + (r.assignee ? E(r.assignee.staff_name) + (r.assignee.position ? ' · ' + E(r.assignee.position) : '') : 'Not assigned yet') + '</dd>' +
           '<dt>Description</dt><dd>' + E(c.description).replace(/\n/g, '<br>') + '</dd>' +
           (c.next_steps && !done ? '<dt>Next steps</dt><dd class="muted">' + E(c.next_steps) + '</dd>' : '') + '</dl>' + CV.ui.photos(r.photos, 'Photo') +
-          (actions ? '<div class="card-head" style="border-top:1px solid var(--line);border-bottom:0"><span></span><div class="toolbar">' + actions + '</div></div>' : '') + '</div>' + fb +
+          (actions ? '<div class="card-head" style="border-top:1px solid var(--line);border-bottom:0"><span></span><div class="toolbar">' + actions + '</div></div>' : '') + '</div>' + (c.status === 'Resolved' ? '' : fb) +
         '</div>' +
         '<div class="card"><div class="card-head"><h3>Progress</h3></div>' + CV.ui.timeline(r.timeline) + '</div></div>';
 

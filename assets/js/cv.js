@@ -153,6 +153,18 @@
     const input = document.getElementById(btn.getAttribute('data-reveal'));
     const show = input.type === 'password'; input.type = show ? 'text' : 'password'; btn.textContent = show ? 'HIDE' : 'SHOW';
   }));
+  /* every other password field (settings, reset, modals...) gets the same SHOW / HIDE button */
+  const addReveal = (input) => {
+    if (input.dataset.revealDone || input.closest('.input-wrap')) { input.dataset.revealDone = '1'; return; }
+    input.dataset.revealDone = '1';
+    const wrap = document.createElement('div'); wrap.className = 'input-wrap';
+    input.parentNode.insertBefore(wrap, input); wrap.appendChild(input);
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'reveal'; b.textContent = 'SHOW'; b.setAttribute('aria-label', 'Show password');
+    b.addEventListener('click', () => { const show = input.type === 'password'; input.type = show ? 'text' : 'password'; b.textContent = show ? 'HIDE' : 'SHOW'; b.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); });
+    wrap.appendChild(b);
+  };
+  CV.$$('input[type=password]').forEach(addReveal);
+  new MutationObserver(() => CV.$$('input[type=password]').forEach(addReveal)).observe(document.body, { childList: true, subtree: true });
   CV.$$('[data-strength]').forEach((input) => {
     const bar = document.getElementById(input.getAttribute('data-strength'));
     if (!bar) return;

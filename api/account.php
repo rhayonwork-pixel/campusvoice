@@ -41,6 +41,7 @@ switch ($action) {
         if ($p = password_problem($new)) json_fail($p);
         q('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE user_id = ?', [password_hash($new, PASSWORD_DEFAULT), $uid]);
         session_regenerate_id(true);
+        remember_forget($uid);
         audit('password_changed', 'Changed own password');
         json_out(['ok' => true, 'message' => 'Password updated.', 'redirect' => url(home_for($u['role']))]);
     }

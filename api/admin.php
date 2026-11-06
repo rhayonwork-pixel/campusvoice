@@ -8,6 +8,7 @@ $action = input('action');
 $reads = ['dashboard', 'list', 'workload', 'detail', 'staff_options'];
 $u = api_guard(['admin'], !in_array($action, $reads, true));
 $uid = (int)$u['user_id'];
+auto_close_resolved();
 
 const ALL_STATUSES = ['Pending', 'Under Review', 'Additional Info Needed', 'Assigned', 'In Progress', 'Waiting for Resources', 'Resolved', 'Reopened', 'Closed', 'Cancelled', 'Submitted'];
 
@@ -133,7 +134,7 @@ switch ($action) {
     case 'assign': {
         $id = input_int('id'); $staffId = input_int('staff_id'); $reason = mb_substr(input('reason'), 0, 255);
         $c = admin_concern($id);
-        if (in_array($c['status'], ['Closed', 'Cancelled'], true)) json_fail('This concern is closed and cannot be assigned.');
+        if (concern_locked($c)) json_fail(CV_LOCKED_MSG);
         $staff = q("SELECT * FROM users WHERE user_id = ? AND role = 'staff' AND account_status = 'active'", [$staffId])->fetch();
         if (!$staff) json_fail('Choose an active staff member.');
         if ($staff['availability'] === 'on_leave') json_fail($staff['first_name'] . ' is on leave. Choose someone else.');
@@ -164,9 +165,11 @@ switch ($action) {
     case 'set_status': {
         $id = input_int('id'); $new = input('status'); $note = mb_substr(input('note'), 0, 500);
         $c = admin_concern($id);
+        if (concern_locked($c) && !($new === 'Closed' && $c['status'] === 'Resolved')) json_fail(CV_LOCKED_MSG);
         if (!in_array($new, ['Under Review', 'Additional Info Needed', 'Closed', 'Cancelled', 'Reopened'], true)) json_fail('Choose a valid status.');
         if ($new === 'Additional Info Needed' && mb_strlen($note) < 10) json_fail('Tell the student exactly what information you need (at least 10 characters).');
         if (in_array($new, ['Cancelled', 'Reopened'], true) && mb_strlen($note) < 3) json_fail('Please add a note.');
+        if (in_array($new, ['Closed', 'Cancelled'], true)) cancel_open_visits($id);
         if ($new === 'Closed') q("UPDATE concerns SET status = 'Closed', closed_at = NOW(), resolved_at = COALESCE(resolved_at, NOW()) WHERE concern_id = ?", [$id]);
         elseif ($new === 'Reopened') q("UPDATE concerns SET status = 'Reopened', resolved_at = NULL, closed_at = NULL, due_at = NOW() + INTERVAL ? HOUR WHERE concern_id = ?", [severity_hours($c['severity']), $id]);
         else q('UPDATE concerns SET status = ? WHERE concern_id = ?', [$new, $id]);
@@ -177,9 +180,15 @@ switch ($action) {
         json_out(['ok' => true, 'message' => 'Status updated.']);
     }
 
+    case 'reopen': {
+        $id = input_int('id');
+        reopen_concern(admin_concern($id), $u, input('reason'));
+    }
+
     case 'set_severity': {
         $id = input_int('id'); $sev = input('severity');
         $c = admin_concern($id);
+        if (concern_locked($c)) json_fail(CV_LOCKED_MSG);
         if (!in_array($sev, ['Minor', 'Major', 'Urgent'], true)) json_fail('Invalid severity.');
         if ($sev === $c['severity']) json_fail('That is already the severity.');
         q('UPDATE concerns SET severity = ?, due_at = created_at + INTERVAL ? HOUR WHERE concern_id = ?', [$sev, severity_hours($sev), $id]);

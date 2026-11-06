@@ -7,6 +7,7 @@ require __DIR__ . '/../includes/visits.php';
 $action = input('action');
 $u = api_guard(['student'], !in_array($action, ['list', 'options', 'detail', 'summary', 'visits_month', 'visit_ics'], true));
 $uid = (int)$u['user_id'];
+auto_close_resolved();
 
 /** Fetch one of THIS student's concerns or stop. */
 function own_concern(int $id, int $uid): array
@@ -179,9 +180,14 @@ switch ($action) {
         if ($rating < 1 || $rating > 5) json_fail('Choose a rating from 1 to 5 stars.');
         if (q('SELECT 1 FROM feedback WHERE concern_id = ?', [$c['concern_id']])->fetchColumn()) json_fail('You already rated this concern.');
         q('INSERT INTO feedback (concern_id, student_id, rating, comment) VALUES (?,?,?,?)', [$c['concern_id'], $uid, $rating, mb_substr(input('comment'), 0, 500) ?: null]);
+        $closedNow = $c['status'] === 'Resolved';
+        if ($closedNow) {   // rating is the student's "yes, it is fixed": the concern ends here
+            q("UPDATE concerns SET status = 'Closed', closed_at = NOW() WHERE concern_id = ?", [$c['concern_id']]);
+            add_update((int)$c['concern_id'], $uid, 'Closed', 'Closed', 'The student rated the result and closed the concern.');
+        }
         notify_role('admin', 'New feedback', "{$c['concern_code']} was rated {$rating}/5.", (int)$c['concern_id']);
         $c['is_anonymous'] ? audit_anonymous('feedback_given', "Rated {$c['concern_code']} {$rating}/5") : audit('feedback_given', "Rated {$c['concern_code']} {$rating}/5");
-        json_out(['ok' => true, 'message' => 'Thanks for your feedback!']);
+        json_out(['ok' => true, 'message' => $closedNow ? 'Thanks for your feedback. The concern is now closed.' : 'Thanks for your feedback!']);
     }
 
     case 'reply': {
@@ -235,6 +241,7 @@ switch ($action) {
             if (!in_array($c['status'], ['Submitted', 'Pending', 'Assigned'], true)) json_fail('A concern can only be cancelled before work starts on it.');
             q("UPDATE assignments SET assignment_status = 'reassigned', reason = 'Cancelled by the reporter' WHERE concern_id = ? AND assignment_status = 'active'", [$id]);
             q("UPDATE concerns SET status = 'Cancelled' WHERE concern_id = ?", [$id]);
+            cancel_open_visits($id);
             add_update($id, $uid, 'Cancelled', 'Cancelled', 'Cancelled by the reporter.');
             $msg = 'Concern cancelled.';
         }
